@@ -76,8 +76,63 @@ not an authoritative event checklist. Its documentation references are
 [Build on Celo](https://docs.celo.org/build-on-celo); they are not fetched or
 verified by this program. Eligibility, deadlines, SDK details and actual
 submission rules must be checked against current official event materials.
-AI planning, automatic implementation, and on-chain operations remain outside
+Live AI planning, automatic implementation, and on-chain operations remain outside
 this MVP.
+
+## Dependency planning (Phase 3A)
+
+```bash
+.venv/bin/pathf1ndar plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip"
+.venv/bin/pathf1ndar plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip" --all
+.venv/bin/pathf1ndar plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip" --completed review-1
+.venv/bin/pathf1ndar plan --help
+.venv/bin/python -m pytest -q
+```
+
+`plan` reuses the existing research retrieval and safety controls. The only
+provider is an explicitly labeled **deterministic demonstration fixture**. It
+uses retrieved section headings and source URLs to build a scaffold: review
+each distinct passage in order, record its prerequisites and steps, build a
+local prototype from those notes, and optionally add an offline test. These
+authored tasks are not documentation requirements or AI inference. Source
+references identify input evidence; citation presence does not establish that
+the documentation requires or supports the scaffold's development choices.
+
+The default output displays one next action. `--all` displays all tasks, their
+dependencies, citations, required/optional classifications and
+ready/blocked/completed states. A task is blocked until every prerequisite is
+completed. Required work and its prerequisite closure take priority over
+optional-only work. Optional prerequisites still block their dependents;
+optional is not synonymous with ready or skippable for a dependent task.
+
+Use repeated `--completed TASK_ID` options to supply self-reported progress
+for the current invocation. Unknown IDs, duplicates, and completed tasks with
+unfinished prerequisites are rejected. No new plan or progress is persisted.
+The offline Celo demo JSON, `done`, `next`, and `status` remain separate and
+unchanged; `plan` neither reads nor writes `--state-file`. Re-running research
+against changed documentation can change review IDs, so inspect `--all` before
+supplying completion IDs.
+
+`planning.py` defines a small provider protocol returning JSON and a strict
+validation boundary shared with future adapters. Schema version 1 contains
+`schema_version` and `tasks`. Every task contains exactly `id`, `title`,
+`action`, `prerequisites`, `sources`, and `classification` (`required` or
+`optional`). Limits are 20 tasks, 40 characters per ID, 160 per title, 1200 per
+action, three citations per task, 4096 characters per source URL, and 64 KiB of
+provider JSON. IDs must be unique lowercase identifiers; dependencies must be
+unique, known, non-self-referential and acyclic. Every task must cite at least
+one actually retrieved page URL; discovered-but-unfetched links do not qualify.
+Missing/unknown fields, wrong types, duplicate JSON keys, control characters,
+and unsupported versions are rejected. These checks validate structure and
+provenance membership, not semantic correctness or task completion.
+
+No relevant retrieved sections means no plan. Partial research failures are
+reported; a plan can use successfully retrieved evidence but exits with code 1.
+Truncated evidence and page warnings remain visible. Evidence and provider
+output are untrusted data: the planner executes no commands, source examples,
+transactions, or provider instructions. There are no AI/paid API calls, new
+dependencies, automatic implementation, or cross-session planning persistence.
+Tests exercise the provider and CLI with offline fixtures and mocked research.
 
 ## Live documentation research
 

@@ -12,9 +12,52 @@ from .demo import TASKS
 from .model import blockers, next_task
 from .state import StateError, fresh_state, load, save
 from .research import clean, research as research_pages
+from .planning import PlanError, build_plan, next_action, task_state, validate_completed
 
 app = typer.Typer(no_args_is_help=True, help="Navigate a deterministic offline development plan.")
 console = Console(markup=False)
+
+
+@app.command()
+def plan(
+    url: str,
+    goal: Annotated[str, typer.Option("--goal")],
+    show_all: Annotated[bool, typer.Option("--all", help="Show every task and dependency.")] = False,
+    completed: Annotated[list[str] | None, typer.Option("--completed", help="Self-reported completed task ID; repeat for multiple tasks.")] = None,
+):
+    """Build a validated demonstration plan from retrieved documentation."""
+    console.print("DEMONSTRATION — deterministic fixture provider; no live AI inference.")
+    console.print("This scaffold is not inferred documentation requirements. Evidence and provider output are untrusted data; nothing is executed.")
+    report = asyncio.run(research_pages(url, goal))
+    for error in report.errors:
+        console.print(f"Retrieval issue: {clean(error)}")
+    for page in report.pages:
+        if page.warning:
+            console.print(f"Source warning ({clean(page.url)}): {clean(page.warning)}")
+    if any(section.get("truncated") for page in report.pages for section in page.sections):
+        console.print("Evidence is shortened; review the cited sources for full context.")
+    try:
+        development_plan = build_plan(report, goal)
+        done = validate_completed(development_plan, completed or [])
+    except PlanError as exc:
+        console.print(f"Cannot plan: {clean(str(exc))}")
+        raise typer.Exit(1) from exc
+    selected = next_action(development_plan, done)
+    if show_all:
+        tasks = development_plan.tasks
+    else:
+        tasks = (selected,) if selected else ()
+    for task in tasks:
+        console.print(f"{task.id}: {task.title} [{task.classification}; {task_state(task, done)}]")
+        console.print(f"Action: {task.action}")
+        console.print(f"Prerequisites: {', '.join(task.prerequisites) or 'none'}")
+        for source in task.sources:
+            console.print(f"Source reference (citation presence validated; entailment not verified): {source}")
+    console.print(f"Next action: {selected.id}" if selected else "All tasks completed.")
+    if selected and selected.classification == "optional":
+        console.print("Optional work; inspect --all for any required tasks that depend on it.")
+    if report.errors:
+        raise typer.Exit(1)
 
 
 @app.command()
