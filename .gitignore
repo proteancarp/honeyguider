@@ -12,3 +12,20 @@ build/
 receipts/
 *.key
 *.pem
+
+# Local credentials and tooling configuration
+.aws/
+.ssh/
+.codex/
+.agents/
+wallets/
+keystore/
+keystores/
+*.p12
+*.pfx
+
+# Private prepared requests and custom demo state (use these locations)
+requests/
+.honeyguider/
+state.json
+honeyguider-cencori-*.json

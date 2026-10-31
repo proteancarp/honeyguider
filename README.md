@@ -1,14 +1,55 @@
 # Honeyguider
 
-A terminal-native AI agent that helps developers
-navigate hackathons and fragmented technical documentation.
+A Python CLI that turns fragmented documentation and hackathon work into a
+clear next step. Start with a deterministic offline practice plan, inspect local
+tools, and track progress in local JSON; no account or wallet is needed.
+
+Open source under the [MIT licence](LICENSE).
 
 ## Core capabilities
-- Research hackathon requirements and documentation
-- Inspect local development prerequisites safely
-- Generate dependency-aware implementation plans
-- Recommend the next actionable step
-- Track progress across sessions
+- Follow an offline Celo practice plan with prerequisite checks
+- Inspect local Python, Git, Node.js and npm versions without installing tools
+- Retrieve source-linked excerpts from public HTTPS documentation
+- Generate deterministic dependency-aware planning scaffolds
+- Recommend the next actionable step and track demo progress across sessions
+
+## Quick start (offline)
+
+Requires Python 3.11+. From a checkout:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/honeyguider explore --demo
+.venv/bin/honeyguider next
+.venv/bin/honeyguider done scope
+.venv/bin/honeyguider check
+.venv/bin/honeyguider next
+.venv/bin/honeyguider status
+```
+
+Installation downloads dependencies; the demo commands then work offline.
+The first `next` shows `scope`. After marking it complete, `check` records local
+tool versions and the next task is `workspace` if all checks pass. Missing Git,
+Node.js or npm makes `check` exit 1 and blocks `workspace`; install missing tools
+yourself and rerun `check`. `status` explains blockers. Completion is self-reported.
+
+**Development status:** this is an early MVP. The demo is an authored practice
+scenario, not verified hackathon rules. Research uses keyword matching and
+planning scaffolds are deterministic; Honeyguider does not implement tasks.
+Live research requires network access. Installation and offline tests require
+no API credentials, blockchain funds or wallet access.
+
+**Live-payment limitation:** the separate `infer` command is experimental, can
+spend real funds, and requires explicit interactive approval. No paid Cencori
+response or on-chain settlement has been verified by this project's offline
+tests. Do not run `infer` to verify installation; review the detailed limitations
+below before considering any live use.
+
+Keep private prepared requests in `requests/`, receipts in `receipts/`, and
+custom state in `.honeyguider/` (or use the default `.pathf1ndar/`). These locations
+are ignored by Git. Arbitrary `--request-file`, `--receipt-dir` or `--state-file`
+paths are not automatically ignored; check `git status` before staging files.
 
 ## Hackathon
 Celo Agents on Open Rails — Build with buy
