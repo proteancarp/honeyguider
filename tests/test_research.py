@@ -309,3 +309,98 @@ def test_unsafe_or_oversized_code_is_explicitly_omitted(code, reason):
     assert not any(b['kind'] == 'code' for b in blocks)
     assert reason in blocks[0]['text']
     assert page.sections[0]['truncated']
+
+
+@pytest.mark.parametrize('heading_matches', [True, False])
+def test_registration_procedure_retains_nonmatching_adjacent_steps(heading_matches):
+    from pathlib import Path
+
+    body = (Path(__file__).parent / 'fixtures' / 'registration_context.html').read_bytes()
+    if not heading_matches:
+        body = body.replace(b'<h2>ERC-8004 registration metadata</h2>', b'<h2>Publish an identity</h2>')
+    goal = 'ERC-8004 registration metadata'
+    page = module.extract(body, URL, goal)
+    steps = [
+        'First, publish the document without the registrations field.',
+        'Next, register on-chain using the published URI.',
+        'Then, read the Registered event from the transaction receipt.',
+        'Finally, update the original document with the resulting agent ID.',
+    ]
+    # These instructions cannot survive by exact goal-word overlap alone.
+    assert all(not module.relevance(step, goal) for step in steps[1:])
+    combined = '\n'.join(s['text'] for s in page.sections)
+    positions = [combined.index(step) for step in steps]
+    assert positions == sorted(positions)
+    assert len(page.sections) <= module.MAX_EXCERPTS
+    assert all(s['source_url'] == URL for s in page.sections)
+    assert all(len(s['blocks']) <= module.MAX_BLOCKS for s in page.sections)
+    assert all(sum(len(b['text']) for b in s['blocks'] if b['kind'] == 'text') <= module.TEXT_CHARS for s in page.sections)
+    assert all(sum(len(b['text']) for b in s['blocks'] if b['kind'] == 'code') <= module.CODE_CHARS for s in page.sections)
+    code = [b['text'] for s in page.sections for b in s['blocks'] if b['kind'] == 'code']
+    assert code == ['{\n  "name": "Sample agent",\n  "description": "ERC-8004 registration metadata"\n}\n']
+    with patch('pathf1ndar.cli.research_pages', AsyncMock(return_value=module.Report(pages=[page]))):
+        result = CliRunner().invoke(app, ['research', URL, '--goal', goal])
+    assert result.exit_code == 0
+    assert all(step in result.output for step in steps)
+    assert 'Excerpt shortened; consult source for full context.' in result.output
+
+
+def test_context_moves_to_next_excerpt_when_prose_budget_is_full():
+    steps = [f'Step {i}: ' + 'instruction ' * 35 for i in range(1, 5)]
+    body = '<h2>Registration metadata</h2>' + ''.join(f'<p>{step}</p>' for step in steps)
+    page = module.extract(body.encode(), URL, 'registration metadata')
+    assert len(page.sections) == 4
+    assert [s['blocks'][0]['text'] for s in page.sections] == [step.strip() for step in steps]
+    assert all(s['truncated'] for s in page.sections)
+
+
+def test_live_mdx_structure_keeps_registration_passage_ahead_of_background():
+    from pathlib import Path
+    from bs4 import BeautifulSoup
+
+    body = (Path(__file__).parent / 'fixtures' / 'celo_8004_mdx.html').read_bytes()
+    source = 'https://docs.celo.org/build/agents/8004'
+    goal = 'Register an ERC-8004 agent on Celo'
+    page = module.extract(body, source, goal)
+    assert len(page.sections) <= module.MAX_EXCERPTS
+    assert page.headings == ['Register a service']
+    combined = '\n'.join(section['text'] for section in page.sections)
+    instructions = [
+        'publish the file without registrations, register, then update the file with the ID it returned',
+        'Read the agent ID from the Registered event on the receipt',
+    ]
+    assert all(instruction in combined for instruction in instructions)
+    assert combined.index(instructions[0]) < combined.index(instructions[1])
+    # Compare the complete short procedural paragraphs with the captured HTML.
+    soup = BeautifulSoup(body, 'html.parser')
+    paragraphs = [module.clean(tag.get_text()) for tag in soup.select('[data-as="p"]')]
+    for paragraph in paragraphs:
+        if 'publish the file without' in paragraph or 'Read the agent ID' in paragraph:
+            assert paragraph in combined
+    expected_json = soup.find('pre').get_text()
+    assert [b['text'] for s in page.sections for b in s['blocks'] if b['kind'] == 'code'] == [expected_json]
+    assert all(s['source_url'] == source for s in page.sections)
+    assert all(len(s['blocks']) <= module.MAX_BLOCKS for s in page.sections)
+    for section in page.sections:
+        for kind, limit in [('text', module.TEXT_CHARS), ('code', module.CODE_CHARS)]:
+            assert sum(len(b['text']) for b in section['blocks'] if b['kind'] == kind) <= limit
+    with patch('pathf1ndar.cli.research_pages', AsyncMock(return_value=module.Report(pages=[page]))):
+        result = CliRunner().invoke(app, ['research', source, '--goal', goal])
+    assert result.exit_code == 0
+    assert result.output.count('Excerpt: Register a service') == 1
+    readable = ' '.join(result.output.split())
+    assert all(instruction in readable for instruction in instructions)
+    assert 'Code block omitted: size limit' in result.output
+
+
+@pytest.mark.parametrize('markup', [
+    '<span data-as="p">{}</span>',
+    '<div data-as="p">{}</div>',
+    '<span role="paragraph">{}</span>',
+])
+def test_semantic_paragraphs_are_recognized_without_site_specific_rules(markup):
+    body = '<h2>Install package</h2>' + markup.format('First, prepare a directory.')
+    body += '<pre>pip install sample</pre>' + markup.format('Then, restart the application.')
+    page = module.extract(body.encode(), URL, 'install package')
+    assert page.sections[0]['text'].index('First, prepare') < page.sections[0]['text'].index('pip install')
+    assert page.sections[0]['text'].index('pip install') < page.sections[0]['text'].index('Then, restart')

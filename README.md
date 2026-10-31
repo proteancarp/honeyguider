@@ -96,8 +96,11 @@ site terms such as `python`, `celo`, and `documentation`. Hostnames and query
 strings do not contribute to link scores. Links require at least two focused
 goal terms, or the sole focused term for a one-term goal. A goal consisting
 only of generic terms retrieves the starting page but produces no matching
-excerpts or followed links. Links rank by overlap then URL; sections rank by
-overlap with document order breaking ties. There are no AI summaries or
+excerpts or followed links. Links rank by overlap then URL. Sections prioritize
+headings matching the goal's first focused term, then heading overlap and total
+overlap, with document order breaking ties. Continuations share their section's
+rank and retain source order; consecutive excerpts display the heading once.
+There are no AI summaries or
 generated requirements.
 
 Semantic navigation, headers, footers, sidebars, breadcrumbs, tables of contents,
@@ -112,6 +115,16 @@ containing unsafe control characters are omitted with a notice, never clipped
 into a partial command. Source text is never repaired or reconstructed; malformed
 examples must be checked at their source. Extraction reflects static HTML text,
 not browser layout or JavaScript-generated examples.
+
+Within a relevant section, excerpts retain a contiguous passage in source order,
+including paragraphs without matching goal words. A matching heading starts the
+passage at the section opening; otherwise it starts up to four blocks before the
+first matching block. Longer passages split into consecutive excerpts within
+the existing budgets, rather than skipping nonmatching procedural steps. The
+five-excerpt page cap still applies; shortened excerpts explicitly direct the
+reader to the source for full context.
+Semantic paragraph markup (`data-as="p"` and `role="paragraph"`) is recognized
+alongside native HTML paragraphs, including MDX-rendered spans and divs.
 
 The in-memory research representation remains bounded and source-linked:
 `Report.pages` contains page URLs, titles, relevant headings, sections and links.

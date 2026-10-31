@@ -26,8 +26,11 @@ def research(url: str, goal: Annotated[str, typer.Option("--goal", help="Words u
     for page in report.pages:
         console.print(f"Source: {clean(page.url)}")
         console.print(f"Retrieved title: {page.title}")
+        previous_heading = None
         for section in page.sections:
-            console.print(f"Excerpt: {section['heading']}")
+            if section["heading"] != previous_heading:
+                console.print(f"Excerpt: {section['heading']}")
+                previous_heading = section["heading"]
             for block in section["blocks"]:
                 if block["kind"] == "code":
                     console.print("Code (source whitespace preserved):")

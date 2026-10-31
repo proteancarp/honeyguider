@@ -1,0 +1,129 @@
+<!-- Pruned live HTML from https://docs.celo.org/build/agents/8004.
+Retains source-order sections, MDX paragraph markup, inline code, and highlighted pre blocks.
+Only unrelated sections, icons, controls, and styling attributes were removed. -->
+<main><div class="mdx-content" id="content"><h2 class="flex whitespace-pre-wrap group font-semibold" id="why-erc-8004"><div class="absolute"><a class="-ml-10 flex items-center opacity-0 border-0 group-hover:opacity-100 focus:opacity-100 focus:outline-0 group/link" href="#why-erc-8004">​<div class="size-6 rounded-md flex items-center justify-center shadow-xs text-gray-400 dark:text-white/50 dark:bg-background-dark dark:brightness-[1.35] dark:ring-1 dark:hover:brightness-150 bg-white ring-1 ring-gray-400/30 dark:ring-gray-700/25 hover:ring-gray-400/60 dark:hover:ring-white/20 group-focus/link:border-2 group-focus/link:border-primary dark:group-focus/link:border-primary-light"></div></a></div><span class="cursor-pointer">Why ERC-8004?</span></h2>
+<span data-as="p">When AI agents interact across organizational boundaries, three critical questions arise:</span>
+<ul>
+<li><strong>Discovery</strong>: How do agents find each other? The Identity Registry provides searchable metadata—agents query the registry to discover other agents by capabilities, endpoints, or domain.</li>
+<li><strong>Identity</strong>: How do agents verify who they’re dealing with? Each agent is an ERC-721 NFT with a cryptographically linked wallet, enabling verification that you’re communicating with the authentic agent owner.</li>
+<li><strong>Trust</strong>: How do agents evaluate reliability? The Reputation Registry stores feedback from every interaction, creating a portable track record that travels with the agent across platforms.</li>
+</ul>
+<h3 class="flex whitespace-pre-wrap group font-semibold" id="register-a-service"><div class="absolute"><a class="-ml-10 flex items-center opacity-0 border-0 group-hover:opacity-100 focus:opacity-100 focus:outline-0 group/link" href="#register-a-service">​<div class="size-6 rounded-md flex items-center justify-center shadow-xs text-gray-400 dark:text-white/50 dark:bg-background-dark dark:brightness-[1.35] dark:ring-1 dark:hover:brightness-150 bg-white ring-1 ring-gray-400/30 dark:ring-gray-700/25 hover:ring-gray-400/60 dark:hover:ring-white/20 group-focus/link:border-2 group-focus/link:border-primary dark:group-focus/link:border-primary-light"></div></a></div><span class="cursor-pointer">Register a service</span></h3>
+<span data-as="p">An identity is not limited to an autonomous agent that acts on its own. Any callable service — an HTTP API, an <a class="link" href="/build/agents/mcp/index">MCP server</a>, a bot — can hold one. The service itself needs no on-chain logic: what it gets is a record agents can find and rate, with endpoints in the Identity Registry and feedback in the Reputation Registry.</span>
+<div class="callout my-4 px-5 py-4 overflow-hidden rounded-2xl flex gap-3 border border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-600/20 [&amp;_[data-component-part='callout-icon']]:mt-px" role="note"><div class="mt-0.5 w-4"></div><div class="text-sm prose dark:prose-invert min-w-0 w-full [&amp;_kbd]:bg-background-light dark:[&amp;_kbd]:bg-background-dark [&amp;_code]:text-current! [&amp;_kbd]:text-current! [&amp;_a]:text-current! [&amp;_a]:border-current [&amp;_strong]:text-current! text-yellow-800 dark:text-yellow-300"><span data-as="p"><strong>The address you register from owns the identity.</strong> Every <code>register()</code> overload mints the NFT to <code>msg.sender</code> and writes <code>agentWallet = msg.sender</code>, so that key is published as the agent’s payment address <em>and</em> controls <code>setAgentURI</code>, transfers, and every other owner-only call. Register from the key that should own the identity. The payee is easy to change afterwards — <code>setAgentWallet()</code> with a signature from the new wallet, or <code>unsetAgentWallet()</code> to clear it, which the owner can call on its own. Ownership is the part that is awkward to undo.</span></div></div>
+<span data-as="p">The registration file is JSON you host anywhere an agent can fetch it — any HTTPS URL, IPFS, or a <code>data:</code> URI stored on-chain; the spec does not mandate a path. <code>services</code> lists the endpoints you want callers to use. The names below are examples rather than a fixed set — the spec leaves the number and type of endpoints to you, and <code>wallet</code> entries for other chains are common. Set <code>x402Support</code> to <code>true</code> if those endpoints accept <a class="link" href="/build/agents/x402">x402</a> payments.</span>
+<div class="code-block mt-5 mb-8 not-prose rounded-2xl relative group min-w-0 print:print-color-exact text-gray-950 dark:text-gray-50 codeblock-light border border-gray-950/10 dark:border-white/10 dark:twoslash-dark bg-transparent dark:bg-transparent"><div class="absolute top-3 right-4 flex items-center gap-1.5 print:hidden"><div class="code-block-copy-button z-10 select-none" id="base-ui-_R_1ua75crmhkd74t9_"><span class="sr-only" role="status"></span></div></div><div class="w-0 min-w-full max-w-full h-full dark:bg-codeblock text-sm leading-6 transition-[height] duration-300 ease-in-out code-block-background **:ring-0 **:outline-0 **:focus:ring-0 **:focus:outline-0 rounded-2xl bg-white" role="presentation"><div class="size-full rounded-[inherit] [--scroll-area-fade-size:32px] py-3.5 px-4 overflow-y-hidden! base-ui-disable-scrollbar"><div class="min-w-full! h-full children:my-0! children:shadow-none! children:bg-transparent!" role="presentation"><div class="font-mono whitespace-pre leading-6"><pre class="shiki shiki-themes github-light-default dark-plus"><code><span class="line"><span>{</span></span>
+<span class="line"><span>  "type"</span><span>: </span><span>"https://eips.ethereum.org/EIPS/eip-8004#registration-v1"</span><span>,</span></span>
+<span class="line"><span>  "name"</span><span>: </span><span>"Example Rates API"</span><span>,</span></span>
+<span class="line"><span>  "description"</span><span>: </span><span>"FX rates for Mento stablecoins, priced per request"</span><span>,</span></span>
+<span class="line"><span>  "image"</span><span>: </span><span>"https://example.com/logo.png"</span><span>,</span></span>
+<span class="line"><span>  "services"</span><span>: [</span></span>
+<span class="line"><span>    {</span></span>
+<span class="line"><span>      "name"</span><span>: </span><span>"web"</span><span>,</span></span>
+<span class="line"><span>      "endpoint"</span><span>: </span><span>"https://example.com"</span></span>
+<span class="line"><span>    },</span></span>
+<span class="line"><span>    {</span></span>
+<span class="line"><span>      "name"</span><span>: </span><span>"MCP"</span><span>,</span></span>
+<span class="line"><span>      "endpoint"</span><span>: </span><span>"https://example.com/mcp"</span><span>,</span></span>
+<span class="line"><span>      "version"</span><span>: </span><span>"2025-06-18"</span></span>
+<span class="line"><span>    },</span></span>
+<span class="line"><span>    {</span></span>
+<span class="line"><span>      "name"</span><span>: </span><span>"A2A"</span><span>,</span></span>
+<span class="line"><span>      "endpoint"</span><span>: </span><span>"https://example.com/.well-known/agent-card.json"</span><span>,</span></span>
+<span class="line"><span>      "version"</span><span>: </span><span>"0.3.0"</span></span>
+<span class="line"><span>    }</span></span>
+<span class="line"><span>  ],</span></span>
+<span class="line"><span>  "x402Support"</span><span>: </span><span>true</span><span>,</span></span>
+<span class="line"><span>  "active"</span><span>: </span><span>true</span><span>,</span></span>
+<span class="line"><span>  "supportedTrust"</span><span>: [</span><span>"reputation"</span><span>],</span></span>
+<span class="line"><span>  "registrations"</span><span>: [</span></span>
+<span class="line"><span>    {</span></span>
+<span class="line"><span>      "agentId"</span><span>: </span><span>12345</span><span>,</span></span>
+<span class="line"><span>      "agentRegistry"</span><span>: </span><span>"eip155:42220:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"</span></span>
+<span class="line"><span>    }</span></span>
+<span class="line"><span>  ]</span></span>
+<span class="line"><span>}</span></span>
+</code></pre></div></div></div></div><div class="code-block-fade-overlay print:hidden"></div></div>
+<span data-as="p"><code>registrations</code> is what lets a caller check that the file and the on-chain entry agree, which is the cross-domain verification described above. You only learn the agent ID once the registration is mined, so the order is: publish the file without <code>registrations</code>, register, then update the file with the ID it returned. For an IPFS or <code>data:</code> URI, adding the ID changes the URI, so point the registry at the new one with <code>setAgentURI(agentId, newURI)</code>.</span>
+<span data-as="p">Then point the registry at that file. Read the agent ID from the <code>Registered</code> event on the receipt — the value <code>register()</code> returns is <code>_lastId</code> at simulation time, so anyone else registering first makes it wrong:</span>
+<div class="code-block mt-5 mb-8 not-prose rounded-2xl relative group min-w-0 print:print-color-exact text-gray-950 dark:text-gray-50 codeblock-light border border-gray-950/10 dark:border-white/10 dark:twoslash-dark bg-transparent dark:bg-transparent"><div class="absolute top-3 right-4 flex items-center gap-1.5 print:hidden"><div class="code-block-copy-button z-10 select-none" id="base-ui-_R_1uad5crmhkd74t9_"><span class="sr-only" role="status"></span></div></div><div class="w-0 min-w-full max-w-full h-full dark:bg-codeblock text-sm leading-6 transition-[height] duration-300 ease-in-out code-block-background **:ring-0 **:outline-0 **:focus:ring-0 **:focus:outline-0 rounded-2xl bg-white" role="presentation"><div class="size-full rounded-[inherit] [--scroll-area-fade-size:32px] py-3.5 px-4 overflow-y-hidden! base-ui-disable-scrollbar"><div class="min-w-full! h-full children:my-0! children:shadow-none! children:bg-transparent!" role="presentation"><div class="font-mono whitespace-pre leading-6"><pre class="shiki shiki-themes github-light-default dark-plus"><code><span class="line"><span>import</span><span> {</span></span>
+<span class="line"><span>  createPublicClient</span><span>,</span></span>
+<span class="line"><span>  createWalletClient</span><span>,</span></span>
+<span class="line"><span>  http</span><span>,</span></span>
+<span class="line"><span>  parseEventLogs</span><span>,</span></span>
+<span class="line"><span>} </span><span>from</span><span> 'viem'</span><span>;</span></span>
+<span class="line"><span>import</span><span> { </span><span>privateKeyToAccount</span><span> } </span><span>from</span><span> 'viem/accounts'</span><span>;</span></span>
+<span class="line"><span>import</span><span> { </span><span>celo</span><span> } </span><span>from</span><span> 'viem/chains'</span><span>;</span></span>
+<span class="line"></span>
+<span class="line"><span>// Celo mainnet (42220), Identity Registry</span></span>
+<span class="line"><span>const</span><span> identityRegistry</span><span> =</span></span>
+<span class="line"><span>  '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432'</span><span>;</span></span>
+<span class="line"><span>const</span><span> abi</span><span> =</span><span> [</span></span>
+<span class="line"><span>  {</span></span>
+<span class="line"><span>    type:</span><span> 'function'</span><span>,</span></span>
+<span class="line"><span>    name:</span><span> 'register'</span><span>,</span></span>
+<span class="line"><span>    stateMutability:</span><span> 'nonpayable'</span><span>,</span></span>
+<span class="line"><span>    inputs:</span><span> [{ </span><span>name:</span><span> 'agentURI'</span><span>, </span><span>type:</span><span> 'string'</span><span> }],</span></span>
+<span class="line"><span>    outputs:</span><span> [{ </span><span>name:</span><span> 'agentId'</span><span>, </span><span>type:</span><span> 'uint256'</span><span> }],</span></span>
+<span class="line"><span>  },</span></span>
+<span class="line"><span>  {</span></span>
+<span class="line"><span>    type:</span><span> 'event'</span><span>,</span></span>
+<span class="line"><span>    name:</span><span> 'Registered'</span><span>,</span></span>
+<span class="line"><span>    inputs:</span><span> [</span></span>
+<span class="line"><span>      { </span><span>name:</span><span> 'agentId'</span><span>, </span><span>type:</span><span> 'uint256'</span><span>, </span><span>indexed:</span><span> true</span><span> },</span></span>
+<span class="line"><span>      { </span><span>name:</span><span> 'agentURI'</span><span>, </span><span>type:</span><span> 'string'</span><span> },</span></span>
+<span class="line"><span>      { </span><span>name:</span><span> 'owner'</span><span>, </span><span>type:</span><span> 'address'</span><span>, </span><span>indexed:</span><span> true</span><span> },</span></span>
+<span class="line"><span>    ],</span></span>
+<span class="line"><span>  },</span></span>
+<span class="line"><span>] </span><span>as</span><span> const</span><span>;</span></span>
+<span class="line"></span>
+<span class="line"><span>// This key's address is minted the NFT and</span></span>
+<span class="line"><span>// published as the agent's wallet</span></span>
+<span class="line"><span>const</span><span> key</span><span> =</span><span> process</span><span>.</span><span>env</span><span>.</span><span>PRIVATE_KEY</span><span> as</span><span> `0x</span><span>${</span><span>string</span><span>}</span><span>`</span><span>;</span></span>
+<span class="line"><span>const</span><span> account</span><span> =</span><span> privateKeyToAccount</span><span>(</span><span>key</span><span>);</span></span>
+<span class="line"><span>const</span><span> publicClient</span><span> =</span><span> createPublicClient</span><span>({</span></span>
+<span class="line"><span>  chain:</span><span> celo</span><span>,</span></span>
+<span class="line"><span>  transport:</span><span> http</span><span>(),</span></span>
+<span class="line"><span>});</span></span>
+<span class="line"><span>const</span><span> walletClient</span><span> =</span><span> createWalletClient</span><span>({</span></span>
+<span class="line"><span>  account</span><span>,</span></span>
+<span class="line"><span>  chain:</span><span> celo</span><span>,</span></span>
+<span class="line"><span>  transport:</span><span> http</span><span>(),</span></span>
+<span class="line"><span>});</span></span>
+<span class="line"></span>
+<span class="line"><span>const</span><span> { </span><span>request</span><span> } </span><span>=</span><span> await</span><span> publicClient</span><span>.</span><span>simulateContract</span><span>({</span></span>
+<span class="line"><span>  account</span><span>,</span></span>
+<span class="line"><span>  address:</span><span> identityRegistry</span><span>,</span></span>
+<span class="line"><span>  abi</span><span>,</span></span>
+<span class="line"><span>  functionName:</span><span> 'register'</span><span>,</span></span>
+<span class="line"><span>  args:</span><span> [</span><span>'https://example.com/agent.json'</span><span>],</span></span>
+<span class="line"><span>});</span></span>
+<span class="line"></span>
+<span class="line"><span>const</span><span> hash</span><span> =</span><span> await</span><span> walletClient</span><span>.</span><span>writeContract</span><span>({</span></span>
+<span class="line"><span>  ...</span><span>request</span><span>,</span></span>
+<span class="line"><span>  // Celo mainnet (42220), USDC fee-currency adapter.</span></span>
+<span class="line"><span>  // USDC has 6 decimals, so feeCurrency takes the</span></span>
+<span class="line"><span>  // adapter address, not the token address. Omit</span></span>
+<span class="line"><span>  // this field to pay gas in CELO.</span></span>
+<span class="line"><span>  feeCurrency:</span><span> '0x2F25deB3848C207fc8E0c34035B3Ba7fC157602B'</span><span>,</span></span>
+<span class="line"><span>});</span></span>
+<span class="line"></span>
+<span class="line"><span>const</span><span> receipt</span><span> =</span></span>
+<span class="line"><span>  await</span><span> publicClient</span><span>.</span><span>waitForTransactionReceipt</span><span>({ </span><span>hash</span><span> });</span></span>
+<span class="line"><span>const</span><span> [</span><span>registered</span><span>] </span><span>=</span><span> parseEventLogs</span><span>({</span></span>
+<span class="line"><span>  abi</span><span>,</span></span>
+<span class="line"><span>  eventName:</span><span> 'Registered'</span><span>,</span></span>
+<span class="line"><span>  logs:</span><span> receipt</span><span>.</span><span>logs</span><span>,</span></span>
+<span class="line"><span>});</span></span>
+<span class="line"><span>console</span><span>.</span><span>log</span><span>(</span><span>'Registered as agent'</span><span>, </span><span>registered</span><span>.</span><span>args</span><span>.</span><span>agentId</span><span>);</span></span>
+</code></pre></div></div></div></div><div class="code-block-fade-overlay print:hidden"></div></div>
+<span data-as="p">Swap in a new file later with <code>setAgentURI(agentId, newURI)</code>, and set <code>"active": false</code> in the file when you retire the service. Transferring the agent NFT clears <code>agentWallet</code>, so the new owner sets it again. Gas for either call can be paid in a stablecoin — see <a class="link" href="/build/fee-abstraction/overview">fee abstraction</a>.</span>
+<h2 class="flex whitespace-pre-wrap group font-semibold" id="integration-with-celo"><div class="absolute"><a class="-ml-10 flex items-center opacity-0 border-0 group-hover:opacity-100 focus:opacity-100 focus:outline-0 group/link" href="#integration-with-celo">​<div class="size-6 rounded-md flex items-center justify-center shadow-xs text-gray-400 dark:text-white/50 dark:bg-background-dark dark:brightness-[1.35] dark:ring-1 dark:hover:brightness-150 bg-white ring-1 ring-gray-400/30 dark:ring-gray-700/25 hover:ring-gray-400/60 dark:hover:ring-white/20 group-focus/link:border-2 group-focus/link:border-primary dark:group-focus/link:border-primary-light"></div></a></div><span class="cursor-pointer">Integration with Celo</span></h2>
+<span data-as="p">ERC-8004 works seamlessly with Celo’s ecosystem:</span>
+<ul>
+<li><strong>Fee abstraction</strong>: Register agents and give feedback paying gas in stablecoins</li>
+<li><strong>x402 payments</strong>: Combine trust verification with instant payments</li>
+<li><strong>MCP servers</strong>: Agents can expose capabilities via Celo MCP Server</li>
+<li><strong>Self Agent ID</strong>: A deployment of all three ERC-8004 registries on Celo that adds a zero-knowledge proof-of-human to each agent identity — see <a class="link" href="/build/agents/self-agent-id">Self Agent ID</a></li>
+</ul>
+</div></main>

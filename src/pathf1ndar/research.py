@@ -153,6 +153,10 @@ def extract(body: bytes, url: str, goal: str) -> Page:
     title = clean(soup.title.get_text(" "))[:300] if soup.title else "(untitled)"
     for tag in soup.select(BOILERPLATE):
         tag.decompose()
+    # MDX renderers can use spans/divs with semantic paragraph metadata.
+    # Normalize the declared role before walking blocks, including nested spans.
+    for tag in soup.select('[data-as="p"], [role="paragraph"]'):
+        tag.name = "p"
     root = soup.find("main") or soup.find("article") or soup.body or soup
     sections = []
     heading, blocks = "Page text", []
@@ -161,34 +165,45 @@ def extract(body: bytes, url: str, goal: str) -> Page:
     def flush():
         matched = relevance(heading + " " + " ".join(b["text"] for b in blocks), goal)
         if blocks and matched:
-            # Prefer blocks matching the goal; retain adjacent code for context.
-            selected = []
-            for index, block in enumerate(blocks):
-                if relevance(block["text"], goal) or block["kind"] in {"code", "notice"}:
-                    selected.append(index)
-            if not selected:
-                selected = list(range(len(blocks)))
-            selected = sorted(set(selected[:MAX_BLOCKS]))
+            # Keep a contiguous passage, not isolated keyword hits. A matching
+            # heading gives its opening instructions context; otherwise start
+            # before the first matching block and retain the following steps.
+            hits = [i for i, block in enumerate(blocks) if relevance(block["text"], goal)]
+            start = 0 if relevance(heading, goal) else max(0, hits[0] - MAX_BLOCKS)
+            selected = blocks[start:start + MAX_BLOCKS * MAX_EXCERPTS]
+            groups = []
             bounded = []
             prose_left, code_left = TEXT_CHARS, CODE_CHARS
-            for i in selected:
-                block = dict(blocks[i])
-                if block["kind"] == "text":
-                    if not prose_left:
-                        continue
+            for original in selected:
+                block = dict(original)
+                is_text = block["kind"] == "text"
+                is_code = block["kind"] == "code"
+                # Start another excerpt instead of dropping later instructions
+                # when the current excerpt's block or character budget is full.
+                if bounded and (len(bounded) == MAX_BLOCKS
+                                or (is_text and len(block["text"]) > prose_left)
+                                or (is_code and len(block["text"]) > code_left)):
+                    groups.append(bounded)
+                    bounded = []
+                    prose_left, code_left = TEXT_CHARS, CODE_CHARS
+                if len(groups) == MAX_EXCERPTS:
+                    break
+                if is_text:
                     block["truncated"] |= len(block["text"]) > prose_left
                     block["text"] = block["text"][:prose_left]
                     prose_left -= len(block["text"])
-                elif block["kind"] == "code":
-                    if len(block["text"]) > code_left:
-                        block = {"kind": "notice", "text": "[Code block omitted: excerpt size limit; consult source.]", "truncated": True}
-                    else:
-                        code_left -= len(block["text"])
+                elif is_code:
+                    # Individual code blocks were bounded at extraction time;
+                    # splitting excerpts never clips or reconstructs their text.
+                    code_left -= len(block["text"])
                 bounded.append(block)
-            sections.append({"heading": heading, "source_url": url,
-                             "text": "\n\n".join(b["text"] for b in bounded),
-                             "blocks": bounded, "matched_terms": matched,
-                             "truncated": len(bounded) < len(blocks) or any(b.get("truncated") for b in bounded)})
+            if bounded and len(groups) < MAX_EXCERPTS:
+                groups.append(bounded)
+            for group in groups:
+                sections.append({"heading": heading, "source_url": url,
+                                 "text": "\n\n".join(b["text"] for b in group),
+                                 "blocks": group, "matched_terms": matched,
+                                 "truncated": len(group) < len(blocks) or any(b.get("truncated") for b in group)})
 
     for tag in root.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "pre"]):
         if tag.name.startswith("h"):
@@ -213,7 +228,18 @@ def extract(body: bytes, url: str, goal: str) -> Page:
             else:
                 blocks.append({"kind": "text", "text": text[:TEXT_CHARS], "truncated": len(text) > TEXT_CHARS})
     flush()
-    sections.sort(key=lambda section: -len(section["matched_terms"]))
+    # The first focused goal term expresses the query's leading intent (for
+    # example, "register" or "install"). Prefer headings that address it over
+    # background passages mentioning many of the remaining query terms. All
+    # continuations share the same score and retain their source order.
+    focused = [word for word in re.findall(r"[a-z0-9]{3,}", goal.lower())
+               if word not in STOP_WORDS | GENERIC_TERMS]
+    intent = focused[0] if focused else ""
+    sections.sort(key=lambda section: (
+        -(intent in terms(section["heading"]) if intent else False),
+        -len(relevance(section["heading"], goal)),
+        -len(section["matched_terms"]),
+    ))
     sections = sections[:MAX_EXCERPTS]
     headings = list(dict.fromkeys(section["heading"] for section in sections))
     links = {}
