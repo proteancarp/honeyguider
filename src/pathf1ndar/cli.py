@@ -13,6 +13,7 @@ from .model import blockers, next_task
 from .state import StateError, fresh_state, load, save
 from .research import clean, research as research_pages
 from .planning import PlanError, build_plan, next_action, task_state, validate_completed
+from .cencori import CencoriError, ENDPOINT, build_request, preserve_request, quote_request, trusted_buy
 
 app = typer.Typer(no_args_is_help=True, help="Navigate a deterministic offline development plan.")
 console = Console(markup=False)
@@ -20,12 +21,55 @@ console = Console(markup=False)
 
 @app.command()
 def plan(
+    ctx: typer.Context,
     url: str,
     goal: Annotated[str, typer.Option("--goal")],
     show_all: Annotated[bool, typer.Option("--all", help="Show every task and dependency.")] = False,
     completed: Annotated[list[str] | None, typer.Option("--completed", help="Self-reported completed task ID; repeat for multiple tasks.")] = None,
+    quote_only: Annotated[bool, typer.Option("--quote-only", help="Prepare Cencori body and obtain an unpaid buy quote.")] = False,
+    prepare_only: Annotated[bool, typer.Option("--prepare-only", help="Save Cencori request without contacting the gateway.")] = False,
+    request_file: Annotated[Path | None, typer.Option("--request-file", help="New file for the exact canonical request body.")] = None,
+    buy_executable: Annotated[Path | None, typer.Option("--buy-executable", help="Absolute path to a trusted installed buy 0.8.4 CLI.")] = None,
+    max_tokens: Annotated[int, typer.Option("--max-tokens")] = 1024,
 ):
     """Build a validated demonstration plan from retrieved documentation."""
+    if quote_only or prepare_only:
+        if (quote_only and prepare_only) or not request_file or show_all or completed:
+            console.print("Choose one Cencori mode with --request-file; --all and --completed apply only to deterministic plans.")
+            raise typer.Exit(2)
+        if request_file.resolve() == ctx.obj.resolve():
+            console.print("Request file must be separate from the offline demo state.")
+            raise typer.Exit(2)
+        try:
+            if quote_only:
+                if buy_executable is None:
+                    raise CencoriError("Quote-only requires --buy-executable pointing to a trusted installed buy 0.8.4 CLI; nothing is downloaded.")
+                trusted_buy(buy_executable)
+            report = asyncio.run(research_pages(url, goal))
+            for error in report.errors:
+                console.print(f"Retrieval issue: {clean(error)}")
+            request = build_request(goal, report, max_tokens)
+            preserve_request(request, request_file)
+            console.print(f"Cencori request prepared: POST {ENDPOINT}")
+            console.print(f"Body file: {request_file.resolve()} ({len(request.body)} bytes)")
+            console.print(f"SHA-256: {request.sha256}")
+            console.print("No inference or payment is authorized. Keep this exact body for later review; never regenerate it for an existing approval.")
+            if quote_only:
+                console.print("Untrusted buy quote output follows; the exact quote is authoritative, not a fixed price.")
+                quote = quote_request(request, buy_executable)
+                console.print(clean(quote.stdout), highlight=False)
+                if quote.stderr:
+                    console.print(clean(quote.stderr), highlight=False)
+                if quote.returncode:
+                    console.print(f"buy quote failed (exit {quote.returncode}); request body preserved; no retry attempted.")
+                    raise typer.Exit(1)
+        except CencoriError as exc:
+            console.print(f"Cannot prepare/quote: {clean(str(exc))}")
+            raise typer.Exit(1) from exc
+        return
+    if request_file or buy_executable or max_tokens != 1024:
+        console.print("Cencori options require --prepare-only or --quote-only.")
+        raise typer.Exit(2)
     console.print("DEMONSTRATION — deterministic fixture provider; no live AI inference.")
     console.print("This scaffold is not inferred documentation requirements. Evidence and provider output are untrusted data; nothing is executed.")
     report = asyncio.run(research_pages(url, goal))
