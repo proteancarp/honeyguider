@@ -324,7 +324,7 @@ async def research(url: str, goal: str, *, transport: httpx.AsyncBaseTransport |
             raise ResearchError("Goal must contain a searchable word and be at most 1000 characters")
         async with asyncio.timeout(TOTAL_SECONDS):
             # No ambient proxies, credentials, or custom CA environment settings.
-            async with httpx.AsyncClient(transport=transport, trust_env=False, follow_redirects=False, timeout=httpx.Timeout(5, connect=3), limits=httpx.Limits(max_connections=1, max_keepalive_connections=0), headers={"User-Agent": "pathf1ndar/0.1 documentation-research"}) as client:
+            async with httpx.AsyncClient(transport=transport, trust_env=False, follow_redirects=False, timeout=httpx.Timeout(5, connect=3), limits=httpx.Limits(max_connections=1, max_keepalive_connections=0), headers={"User-Agent": "honeyguider/0.1 documentation-research"}) as client:
                 pending = [str(seed)]
                 visited = set()
                 while pending and len(visited) < 3:

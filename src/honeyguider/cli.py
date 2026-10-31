@@ -145,6 +145,7 @@ def research(url: str, goal: Annotated[str, typer.Option("--goal", help="Words u
         raise typer.Exit(1)
 
 
+# Retain the legacy directory so the rename continues to find existing progress.
 @app.callback()
 def main(ctx: typer.Context, state_file: Annotated[Path, typer.Option("--state-file", help="Local progress JSON file.")] = Path(".pathf1ndar/state.json")):
     ctx.obj = state_file
@@ -152,7 +153,7 @@ def main(ctx: typer.Context, state_file: Annotated[Path, typer.Option("--state-f
 
 def read(ctx: typer.Context) -> dict:
     if not ctx.obj.exists():
-        console.print("No plan yet. Run: pathf1ndar explore --demo")
+        console.print("No plan yet. Run: honeyguider explore --demo")
         raise typer.Exit(1)
     try:
         return load(ctx.obj)
@@ -203,7 +204,7 @@ def next_command(ctx: typer.Context):
         console.print(f"{task.id}: {task.title}\n{task.action}")
         for source in task.sources:
             console.print(f"Documentation reference (not fetched): {source}")
-        console.print(f"When finished: pathf1ndar done {task.id}")
+        console.print(f"When finished: honeyguider done {task.id}")
     elif len(state["completed"]) == len(TASKS):
         console.print("All tasks complete.")
     else:
