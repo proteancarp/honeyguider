@@ -134,6 +134,81 @@ transactions, or provider instructions. There are no AI/paid API calls, new
 dependencies, automatic implementation, or cross-session planning persistence.
 Tests exercise the provider and CLI with offline fixtures and mocked research.
 
+## Cencori request preparation and unpaid quotes (Phase 3B.1)
+
+Default `plan` behavior remains the deterministic demonstration. Cencori modes
+prepare a future inference request; they do not retrieve an AI completion or
+perform a payment. `--prepare-only` retrieves documentation and saves the body
+without contacting the gateway:
+
+```bash
+.venv/bin/pathf1ndar plan https://docs.celo.org/build/agents/8004 \
+  --goal "Register an ERC-8004 agent on Celo" \
+  --prepare-only --max-tokens 1024 \
+  --request-file /tmp/pathf1ndar-cencori-prepare.json
+```
+
+For an unpaid quote, supply an **already installed, trusted** `@celo/buy@0.8.4`
+executable. Replace the executable path below with its actual absolute path;
+pathf1ndar does not install packages, invoke npx, create wallets, inspect keys,
+or fund accounts. Each invocation requires a new output filename:
+
+```bash
+.venv/bin/pathf1ndar plan https://docs.celo.org/build/agents/8004 \
+  --goal "Register an ERC-8004 agent on Celo" \
+  --quote-only --max-tokens 1024 \
+  --buy-executable /absolute/path/to/trusted/buy \
+  --request-file /tmp/pathf1ndar-cencori-quote.json
+.venv/bin/python -m json.tool /tmp/pathf1ndar-cencori-quote.json
+sha256sum /tmp/pathf1ndar-cencori-quote.json
+.venv/bin/python -m pytest -q
+```
+
+The adapter checks `buy --version`, accepts only the tested 0.8.4 interface,
+and invokes the documented
+[buy quote command](https://github.com/celo-org/buy-skill/blob/main/skills/use-api-gateway/SKILL.md#partner-paywalls)
+using `quote -X POST -H 'content-type: application/json' --data BODY` and the
+fixed endpoint `https://gateway.usebuy.ai/cencori/v1/chat/completions`. `BODY` is
+the **exact saved body**, passed as one argument, not a placeholder prompt or
+shell command. Only these two fixed buy operations are available. Version and
+quote timeouts are five and thirty seconds, with no retry. Executable identity
+is trusted by your explicit path selection, not proven by its version string;
+use a trusted installation and PATH for its runtime. Credentials, wallet
+variables, and Node options from the parent environment are not forwarded.
+
+The request builder uses only `model`, `max_tokens`, and `messages`, targeting
+`maximo-atlas-1.3`. Output budgets are restricted to 256, 1024 or 4096 tokens.
+System instructions include the strict plan JSON shape, graph rules, limits,
+and allowed citation URLs. The user message encodes the goal and bounded
+retrieved excerpts as untrusted JSON data, preserving code, source attribution,
+and truncation/omission flags. Unfetched links are excluded. Retrieval failures,
+missing excerpts, mismatched citations and out-of-budget evidence are rejected.
+The complete outer request is serialized once using sorted keys, compact
+separators and ASCII escapes, and rejected above **32768 bytes**. There is no
+automatic shortening to silently remove instructions or alter code.
+
+Request files contain the canonical body only, without a trailing newline;
+they are exclusively created with owner-only permissions and never overwrite
+existing files or the selected demo state. The CLI prints the SHA-256 and byte
+count before quoting. A failure leaves the body available for inspection.
+Keep that file and digest for later exact-request approval; regenerating a
+request from changed documentation creates a different request. A future paid
+integration must verify those bytes and obtain approval separately. This phase
+provides no approval storage, signing, payment path or inference-response parser.
+
+Quote mode sends the goal and excerpts to the external gateway via buy, so
+review the saved content and keep secrets out of goals and public evidence.
+Quote output is untrusted text, displayed with terminal controls removed and
+at most 16000 bytes from each output stream. It is never used as executable
+instructions, an endpoint override, a payment authorization, or a price cap.
+No token/amount is hardcoded: the returned quote is authoritative. The confirmed
+gateway supports USDC, USDT and USAT on Celo; token selection and payment are
+outside this phase. Quote failures exit 1; conflicting options exit 2.
+
+Offline tests mock buy and HTTP research. They verify the request contract,
+byte limits, injection separation, exact quote arguments, failure handling and
+absence of payment commands. No live quote success is implied by those tests.
+
 ## Live documentation research
 
 ```bash
