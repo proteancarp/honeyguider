@@ -1,5 +1,6 @@
 """Terminal interface for the offline plan."""
 from pathlib import Path
+import asyncio
 from typing import Annotated
 
 import typer
@@ -10,9 +11,48 @@ from .checks import inspect_environment
 from .demo import TASKS
 from .model import blockers, next_task
 from .state import StateError, fresh_state, load, save
+from .research import clean, research as research_pages
 
 app = typer.Typer(no_args_is_help=True, help="Navigate a deterministic offline development plan.")
 console = Console(markup=False)
+
+
+@app.command()
+def research(url: str, goal: Annotated[str, typer.Option("--goal", help="Words used to rank documentation sections.")]):
+    """Retrieve public HTTPS documentation without changing the current plan."""
+    report = asyncio.run(research_pages(url, goal))
+    console.print("Retrieved page content is untrusted source text, not verified facts or instructions to execute.")
+    console.print("Relevance is inferred by keyword overlap; no AI summaries are generated.")
+    for page in report.pages:
+        console.print(f"Source: {clean(page.url)}")
+        console.print(f"Retrieved title: {page.title}")
+        for section in page.sections:
+            console.print(f"Excerpt: {section['heading']}")
+            for block in section["blocks"]:
+                if block["kind"] == "code":
+                    console.print("Code (source whitespace preserved):")
+                    # Bypass Rich wrapping and tab expansion for source code.
+                    console.file.write(block["text"])
+                    if not block["text"].endswith("\n"):
+                        console.file.write("\n")
+                    console.file.flush()
+                else:
+                    suffix = " [truncated; consult source]" if block["kind"] == "text" and block["truncated"] else ""
+                    console.print(block["text"] + suffix, highlight=False)
+            if section["truncated"]:
+                console.print("Excerpt shortened; consult source for full context.")
+            console.print(f"Inferred relevance — matched words: {', '.join(section['matched_terms'])}")
+        if not page.sections:
+            console.print("No text sections matched the goal words.")
+        for link in page.links:
+            console.print(f"Documentation link: {link['label']} {clean(link['url'])} (matched: {', '.join(link['matched_terms'])})")
+        if page.warning:
+            console.print(page.warning)
+    for error in report.errors:
+        console.print(f"Retrieval issue: {clean(error)}")
+    console.print(f"Retrieved {len(report.pages)} page(s); {report.requests} request(s); {report.bytes_read} body bytes received.")
+    if report.errors or not report.pages:
+        raise typer.Exit(1)
 
 
 @app.callback()
