@@ -1,6 +1,6 @@
-# Pathfinder Development Instructions
+# Honeyguider Development Instructions
 
-You are implementing pathf1ndar, a Python CLI agent.
+You are implementing honeyguider, a Python CLI agent.
 
 Priorities:
 1. Working MVP before additional features.

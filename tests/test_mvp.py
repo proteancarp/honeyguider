@@ -5,11 +5,11 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from pathf1ndar.cli import app
-from pathf1ndar.checks import inspect_environment
-from pathf1ndar.demo import TASKS
-from pathf1ndar.model import next_task
-from pathf1ndar.state import StateError, fresh_state, load, save
+from honeyguider.cli import app
+from honeyguider.checks import inspect_environment
+from honeyguider.demo import TASKS
+from honeyguider.model import next_task
+from honeyguider.state import StateError, fresh_state, load, save
 
 
 runner = CliRunner()
@@ -40,7 +40,7 @@ def test_cli_full_journey(tmp_path):
     assert "No actionable task" in invoke("next").output
     assert invoke("explore", "--demo").exit_code == 0
     assert load(path)["completed"] == ["scope"]
-    with patch("pathf1ndar.cli.inspect_environment", return_value=tools_ok()):
+    with patch("honeyguider.cli.inspect_environment", return_value=tools_ok()):
         assert invoke("check").exit_code == 0
     for task in TASKS[1:]:
         assert f"{task.id}:" in invoke("next").output
@@ -73,7 +73,7 @@ def test_invalid_state(tmp_path, change):
 
 
 def test_missing_tools():
-    with patch("pathf1ndar.checks.shutil.which", return_value=None), patch("pathf1ndar.checks.subprocess.run") as run:
+    with patch("honeyguider.checks.shutil.which", return_value=None), patch("honeyguider.checks.subprocess.run") as run:
         results = inspect_environment()
     run.assert_not_called()
     assert results["python"]["available"] is True
@@ -81,7 +81,7 @@ def test_missing_tools():
 
 
 def test_fixed_commands_and_failures():
-    with patch("pathf1ndar.checks.shutil.which", side_effect=lambda name: f"/usr/bin/{name}"), patch("pathf1ndar.checks.subprocess.run", side_effect=[subprocess.CompletedProcess([], 0, "git version fixture", ""), subprocess.TimeoutExpired("node", 5), subprocess.CompletedProcess([], 1, "", "failed")]) as run:
+    with patch("honeyguider.checks.shutil.which", side_effect=lambda name: f"/usr/bin/{name}"), patch("honeyguider.checks.subprocess.run", side_effect=[subprocess.CompletedProcess([], 0, "git version fixture", ""), subprocess.TimeoutExpired("node", 5), subprocess.CompletedProcess([], 1, "", "failed")]) as run:
         results = inspect_environment()
     assert results["git"]["available"]
     assert not results["node"]["available"]
@@ -95,7 +95,7 @@ def test_failed_check_is_persisted(tmp_path):
     save(path, fresh_state())
     checks = tools_ok()
     checks["node"]["available"] = False
-    with patch("pathf1ndar.cli.inspect_environment", return_value=checks):
+    with patch("honeyguider.cli.inspect_environment", return_value=checks):
         result = runner.invoke(app, ["--state-file", str(path), "check"])
     assert result.exit_code == 1
     assert load(path)["checks"]["node"]["available"] is False

@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from pathf1ndar.cli import app
-from pathf1ndar.planning import (
+from honeyguider.cli import app
+from honeyguider.planning import (
     FixtureProvider, MAX_TASKS, PlanError, build_plan, next_action,
     task_state, validate_completed, validate_plan,
 )
-from pathf1ndar.research import Report, extract
+from honeyguider.research import Report, extract
 
 URL = 'https://docs.example.com/guide'
 
@@ -169,7 +169,7 @@ def test_insufficient_evidence():
 
 def invoke(evidence, *args, state=None):
     prefix = ['--state-file', str(state)] if state else []
-    with patch('pathf1ndar.cli.research_pages', AsyncMock(return_value=evidence)) as research:
+    with patch('honeyguider.cli.research_pages', AsyncMock(return_value=evidence)) as research:
         result = CliRunner().invoke(app, [*prefix, 'plan', URL, '--goal', 'install package', *args])
     research.assert_awaited_once_with(URL, 'install package')
     return result
@@ -219,7 +219,7 @@ def test_cli_invalid_completion_and_failed_research(evidence):
 
 
 def test_cli_rejects_malformed_provider_output(evidence):
-    with patch('pathf1ndar.planning.FixtureProvider.generate', return_value='not JSON'):
+    with patch('honeyguider.planning.FixtureProvider.generate', return_value='not JSON'):
         result = invoke(evidence)
     assert result.exit_code == 1 and 'Cannot plan' in result.output
 

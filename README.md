@@ -1,4 +1,4 @@
-# pathf1ndar
+# Honeyguider
 
 A terminal-native AI agent that helps developers
 navigate hackathons and fragmented technical documentation.
@@ -23,13 +23,13 @@ Requires Python 3.11+. Install explicitly in a local virtual environment:
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
-.venv/bin/pathf1ndar --help
-.venv/bin/pathf1ndar explore --demo
-.venv/bin/pathf1ndar check
-.venv/bin/pathf1ndar next
-.venv/bin/pathf1ndar done scope
-.venv/bin/pathf1ndar next
-.venv/bin/pathf1ndar status
+.venv/bin/honeyguider --help
+.venv/bin/honeyguider explore --demo
+.venv/bin/honeyguider check
+.venv/bin/honeyguider next
+.venv/bin/honeyguider done scope
+.venv/bin/honeyguider next
+.venv/bin/honeyguider status
 .venv/bin/python -m pytest -q
 ```
 
@@ -45,14 +45,20 @@ required tool checks. `done TASK_ID` records self-reported completion and refuse
 blocked or unknown tasks. Complete tasks in this order:
 `scope`, `workspace`, `prototype`, `validate`, `submission`.
 The workspace task requires successful checks for all four tools. Completion is
-manual; pathf1ndar does not create the prototype or verify its implementation.
+manual; honeyguider does not create the prototype or verify its implementation.
 
 Progress is stored in `.pathf1ndar/state.json` relative to the current directory.
+This legacy directory name is intentionally retained after the Honeyguider
+rename so existing demo progress remains available without migration. No state
+files are renamed, deleted, or overwritten by the rename. Use `--state-file`
+to choose a different location explicitly. The distribution, Python imports,
+and executable are now `honeyguider`; the old import and command names are not
+compatibility aliases.
 Use the global option before the command to select another file:
 
 ```bash
-.venv/bin/pathf1ndar --state-file /tmp/pathf1ndar-demo.json explore --demo
-.venv/bin/pathf1ndar --state-file /tmp/pathf1ndar-demo.json status
+.venv/bin/honeyguider --state-file /tmp/honeyguider-demo.json explore --demo
+.venv/bin/honeyguider --state-file /tmp/honeyguider-demo.json status
 ```
 
 Repeated exploration preserves progress. Checks are saved snapshots; rerun
@@ -63,7 +69,7 @@ To start again, choose a new state file.
 
 ## Architecture and scope
 
-`src/pathf1ndar/cli.py` handles Typer commands and Rich output. `model.py` holds
+`src/honeyguider/cli.py` handles Typer commands and Rich output. `model.py` holds
 tasks and prerequisite selection, `demo.py` defines the deterministic Celo
 practice fixture, `checks.py` inspects local tools, and `state.py` validates and
 persists versioned JSON. Tests mock tool execution and need no network or Node
@@ -82,10 +88,10 @@ this MVP.
 ## Dependency planning (Phase 3A)
 
 ```bash
-.venv/bin/pathf1ndar plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip"
-.venv/bin/pathf1ndar plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip" --all
-.venv/bin/pathf1ndar plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip" --completed review-1
-.venv/bin/pathf1ndar plan --help
+.venv/bin/honeyguider plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip"
+.venv/bin/honeyguider plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip" --all
+.venv/bin/honeyguider plan https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip" --completed review-1
+.venv/bin/honeyguider plan --help
 .venv/bin/python -m pytest -q
 ```
 
@@ -142,25 +148,25 @@ perform a payment. `--prepare-only` retrieves documentation and saves the body
 without contacting the gateway:
 
 ```bash
-.venv/bin/pathf1ndar plan https://docs.celo.org/build/agents/8004 \
+.venv/bin/honeyguider plan https://docs.celo.org/build/agents/8004 \
   --goal "Register an ERC-8004 agent on Celo" \
   --prepare-only --max-tokens 1024 \
-  --request-file /tmp/pathf1ndar-cencori-prepare.json
+  --request-file /tmp/honeyguider-cencori-prepare.json
 ```
 
 For an unpaid quote, supply an **already installed, trusted** `@celo/buy@0.8.4`
 executable. Replace the executable path below with its actual absolute path;
-pathf1ndar does not install packages, invoke npx, create wallets, inspect keys,
+honeyguider does not install packages, invoke npx, create wallets, inspect keys,
 or fund accounts. Each invocation requires a new output filename:
 
 ```bash
-.venv/bin/pathf1ndar plan https://docs.celo.org/build/agents/8004 \
+.venv/bin/honeyguider plan https://docs.celo.org/build/agents/8004 \
   --goal "Register an ERC-8004 agent on Celo" \
   --quote-only --max-tokens 1024 \
   --buy-executable /absolute/path/to/trusted/buy \
-  --request-file /tmp/pathf1ndar-cencori-quote.json
-.venv/bin/python -m json.tool /tmp/pathf1ndar-cencori-quote.json
-sha256sum /tmp/pathf1ndar-cencori-quote.json
+  --request-file /tmp/honeyguider-cencori-quote.json
+.venv/bin/python -m json.tool /tmp/honeyguider-cencori-quote.json
+sha256sum /tmp/honeyguider-cencori-quote.json
 .venv/bin/python -m pytest -q
 ```
 
@@ -212,9 +218,9 @@ absence of payment commands. No live quote success is implied by those tests.
 ## Live documentation research
 
 ```bash
-.venv/bin/pathf1ndar research https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip"
-.venv/bin/pathf1ndar research https://docs.celo.org/ --goal "build agents"
-.venv/bin/pathf1ndar research --help
+.venv/bin/honeyguider research https://docs.python.org/3/tutorial/venv.html --goal "create virtual environment pip"
+.venv/bin/honeyguider research https://docs.celo.org/ --goal "build agents"
+.venv/bin/honeyguider research --help
 .venv/bin/python -m pytest -q
 ```
 

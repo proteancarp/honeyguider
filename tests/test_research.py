@@ -7,8 +7,8 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
-from pathf1ndar import research as module
-from pathf1ndar.cli import app
+from honeyguider import research as module
+from honeyguider.cli import app
 
 URL = "https://docs.example.com/start"
 IP = "93.184.216.34"
@@ -187,7 +187,7 @@ def test_malformed_html_is_reported():
 
 def test_research_does_not_create_state(tmp_path):
     state = tmp_path / "absent.json"
-    with patch("pathf1ndar.cli.research_pages", AsyncMock(return_value=module.Report())):
+    with patch("honeyguider.cli.research_pages", AsyncMock(return_value=module.Report())):
         CliRunner().invoke(app, ["--state-file", str(state), "research", URL, "--goal", "python"])
     assert not state.exists()
 
@@ -203,13 +203,13 @@ def test_cli_does_not_touch_plan(tmp_path):
     state.write_text('existing progress, even if invalid')
     before = state.read_bytes()
     report = run(lambda r: html())
-    with patch("pathf1ndar.cli.research_pages", AsyncMock(return_value=report)):
+    with patch("honeyguider.cli.research_pages", AsyncMock(return_value=report)):
         result = CliRunner().invoke(app, ["--state-file", str(state), "research", URL, "--goal", "python setup"])
     assert result.exit_code == 0, result.output
     assert "untrusted source text" in result.output
     assert "Inferred relevance" in result.output
     assert state.read_bytes() == before
-    with patch("pathf1ndar.cli.research_pages", AsyncMock(return_value=module.Report(errors=["HTTP 403"]))):
+    with patch("honeyguider.cli.research_pages", AsyncMock(return_value=module.Report(errors=["HTTP 403"]))):
         result = CliRunner().invoke(app, ["research", URL, "--goal", "python"])
     assert result.exit_code == 1 and "HTTP 403" in result.output
 
@@ -288,7 +288,7 @@ def test_code_spans_indentation_tabs_blank_lines_and_continuations_preserved():
     code = next(b['text'] for b in page.sections[0]['blocks'] if b['kind'] == 'code')
     assert code == source
     report = module.Report(pages=[page])
-    with patch('pathf1ndar.cli.research_pages', AsyncMock(return_value=report)):
+    with patch('honeyguider.cli.research_pages', AsyncMock(return_value=report)):
         result = CliRunner().invoke(app, ['research', URL, '--goal', 'virtual environment'])
     assert result.exit_code == 0
     assert source in result.output
@@ -338,7 +338,7 @@ def test_registration_procedure_retains_nonmatching_adjacent_steps(heading_match
     assert all(sum(len(b['text']) for b in s['blocks'] if b['kind'] == 'code') <= module.CODE_CHARS for s in page.sections)
     code = [b['text'] for s in page.sections for b in s['blocks'] if b['kind'] == 'code']
     assert code == ['{\n  "name": "Sample agent",\n  "description": "ERC-8004 registration metadata"\n}\n']
-    with patch('pathf1ndar.cli.research_pages', AsyncMock(return_value=module.Report(pages=[page]))):
+    with patch('honeyguider.cli.research_pages', AsyncMock(return_value=module.Report(pages=[page]))):
         result = CliRunner().invoke(app, ['research', URL, '--goal', goal])
     assert result.exit_code == 0
     assert all(step in result.output for step in steps)
@@ -384,7 +384,7 @@ def test_live_mdx_structure_keeps_registration_passage_ahead_of_background():
     for section in page.sections:
         for kind, limit in [('text', module.TEXT_CHARS), ('code', module.CODE_CHARS)]:
             assert sum(len(b['text']) for b in section['blocks'] if b['kind'] == kind) <= limit
-    with patch('pathf1ndar.cli.research_pages', AsyncMock(return_value=module.Report(pages=[page]))):
+    with patch('honeyguider.cli.research_pages', AsyncMock(return_value=module.Report(pages=[page]))):
         result = CliRunner().invoke(app, ['research', source, '--goal', goal])
     assert result.exit_code == 0
     assert result.output.count('Excerpt: Register a service') == 1
