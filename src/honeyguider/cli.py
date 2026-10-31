@@ -7,6 +7,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from . import paid
 from .checks import inspect_environment
 from .demo import TASKS
 from .model import blockers, next_task
@@ -17,6 +18,36 @@ from .cencori import CencoriError, ENDPOINT, build_request, preserve_request, qu
 
 app = typer.Typer(no_args_is_help=True, help="Navigate a deterministic offline development plan.")
 console = Console(markup=False)
+
+
+@app.command()
+def infer(
+    request_file: Annotated[Path, typer.Option("--request-file")],
+    buy_executable: Annotated[Path, typer.Option("--buy-executable")],
+    receipt_dir: Annotated[Path, typer.Option("--receipt-dir", help="New private directory; existing paths are refused.")],
+    token: Annotated[str, typer.Option("--token", help="USDC, USDT or USAT; must be offered.")] = "USDC",
+):
+    """Interactively approve at most one paid Cencori request from saved bytes."""
+    try:
+        result = paid.infer(request_file, buy_executable, receipt_dir, token,
+                            lambda question: typer.prompt(question),
+                            lambda text: console.print(text, highlight=False))
+    except CencoriError as exc:
+        console.print(clean(str(exc)), highlight=False)
+        console.print("No automatic retry. Raw evidence, if any, remains in the private receipt directory.")
+        raise typer.Exit(1) from exc
+    except (OSError, typer.Abort, KeyboardInterrupt, EOFError):
+        # Do not echo exception text, provider output, credentials or wallet data.
+        console.print("Inference stopped. No automatic retry. Settlement is UNKNOWN if launch was possible. Missing or incomplete receipt records never prove that no payment occurred; inspect the private receipt directory before considering any further payment.")
+        raise typer.Exit(1)
+    console.print("AI-generated tasks: unverified recommendations grounded in retrieved excerpts. Commands are never executed.")
+    action = next_action(result, frozenset())
+    if action:
+        console.print(f"Next action: {action.id}: {action.title} [{action.classification}]")
+        console.print(action.action, highlight=False)
+        for source in action.sources:
+            console.print(f"Source: {source}")
+    console.print(f"Private raw response and payment evidence: {receipt_dir.resolve()}")
 
 
 @app.command()
