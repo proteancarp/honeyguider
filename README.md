@@ -82,8 +82,8 @@ not an authoritative event checklist. Its documentation references are
 [Build on Celo](https://docs.celo.org/build-on-celo); they are not fetched or
 verified by this program. Eligibility, deadlines, SDK details and actual
 submission rules must be checked against current official event materials.
-Live AI planning, automatic implementation, and on-chain operations remain outside
-this MVP.
+Automatic implementation remains outside this MVP. Paid AI planning is available
+only through the explicitly approved `infer` workflow below.
 
 ## Dependency planning (Phase 3A)
 
@@ -199,8 +199,8 @@ existing files or the selected demo state. The CLI prints the SHA-256 and byte
 count before quoting. A failure leaves the body available for inspection.
 Keep that file and digest for later exact-request approval; regenerating a
 request from changed documentation creates a different request. A future paid
-integration must verify those bytes and obtain approval separately. This phase
-provides no approval storage, signing, payment path or inference-response parser.
+integration must verify those bytes and obtain approval separately. The preparation/quote modes provide no payment path; the separate `infer`
+command below adds interactive execution for already saved requests.
 
 Quote mode sends the goal and excerpts to the external gateway via buy, so
 review the saved content and keep secrets out of goals and public evidence.
@@ -266,7 +266,8 @@ The in-memory research representation remains bounded and source-linked:
 `Report.pages` contains page URLs, titles, relevant headings, sections and links.
 Sections retain their source URL, matched terms, truncation flag, and ordered
 typed blocks (`text`, `code`, or omission `notice`). This keeps evidence and
-inferred relevance separate for possible later inference; no LLM is integrated.
+inferred relevance separate. Research itself performs no inference; saved
+evidence can be submitted through the explicitly approved `infer` workflow.
 
 Only the top two sufficiently matching links from the starting page are followed;
 zero or one may qualify. Linked pages do not expand the crawl. All pages and redirects must use HTTPS port 443
@@ -317,3 +318,164 @@ warning; detecting all JavaScript-dependent pages is not possible. HTTP/DNS/TLS
 failures are reported with their source URL. Exit code 1 means a retrieval issue
 occurred, including partial success; successful pages remain visible. No live
 website availability is implied by the mocked tests.
+
+
+## Explicitly approved inference (Phase 3B.2)
+
+`infer` reads an existing canonical Cencori request without fetching documentation
+or regenerating the HTTP body. It rejects oversized (>32 KiB), duplicate-key,
+noncanonical or unsupported JSON, modified system instructions/schema, unsupported
+models/token budgets, and evidence outside the original excerpt limits. Allowed
+plan citations come only from page URLs in that request. This checks internal
+consistency; it does not cryptographically attest that a manually authored file
+was retrieved from the web. Review prepared files before approving them.
+
+The following is a **paid command**, provided for review and later authorized
+live testing. Do not run it merely to verify installation; use `infer --help`
+and pytest for offline checks. No real payment was used to test this phase.
+
+```bash
+.venv/bin/honeyguider infer --help
+.venv/bin/python -m pytest -q
+
+# PAID: requires active interactive approval; use only after independent review.
+.venv/bin/honeyguider infer \
+  --request-file /tmp/honeyguider-cencori-quote.json \
+  --buy-executable /home/anu/.local/share/honeyguider-buy/node_modules/.bin/buy \
+  --receipt-dir receipts/cencori-attempt-001 \
+  --token USDC
+```
+
+The buy path above was inspected locally: `--version`, `--help` and
+`curl --help` reported **0.8.4**. Choose your own trusted absolute executable
+path on another machine. `infer` requires a new receipt directory whose parent
+already exists (for example, create `receipts/` manually). It never reuses or
+resumes an attempt directory, and refuses unattended stdin/stdout. There is no
+`--yes`, approval environment variable, automatic spend cap, or payment retry.
+
+The installed 0.8.4 quote implementation explicitly supports `buy --json quote`;
+this returns the parsed x402 envelope on stdout. Honeyguider runs:
+
+```text
+BUY --version
+BUY --json quote --token TOKEN -X POST -H "content-type: application/json" --data EXACT_BODY ENDPOINT
+BUY --json curl --max-amount CAP --token TOKEN -X POST -H "content-type: application/json" --data EXACT_BODY --dump-header PRIVATE_HEADERS_FILE ENDPOINT
+```
+
+The last invocation happens only after approval. `--json` is a global buy option
+and must precede `curl`; `--max-amount` and `--token` are buy curl options.
+`--dump-header` is forwarded to curl, supported by buy's inspected header-capture
+path; stdout remains the response body. No `--data-file` is used: the original
+in-memory UTF-8 body is passed unchanged as one argv element to both calls.
+Nothing is interpolated into a shell. Honeyguider invokes no wallet setup,
+funding, key access, signer implementation or payment-negotiation code of its own.
+
+The narrowly supported quote shape has `x402Version: 1` and an `accepts`
+array in buy's normalized form: `network: "celo"`, `scheme: "exact"`, `asset`,
+`maxAmountRequired` (decimal atomic integer) and `payTo`. Mainnet token addresses
+and six-decimal conversion are pinned to the locally inspected buy-core 0.8.4
+USDC/USDT/USAT definitions. Version 2 is explicitly rejected until its gateway schema is confirmed. Unsupported shapes, networks or schemes are refused.
+The selected token must actually be offered; buy also enforces token selection
+at payment time. There is no hardcoded inference price.
+
+After displaying the fresh selected-token offer(s), Honeyguider prompts for a
+positive cap in **human-readable token units**, not atomic units. Caps support
+at most six decimal places and a fixed conservative pilot ceiling of **0.05
+token units**. A selected-token quote above that ceiling is rejected, not used
+to raise the ceiling. The human cap must equal a freshly quoted selected-token
+offer exactly in value; both smaller and larger caps are refused. Equivalent
+decimal spellings such as `0.01` and `0.010000` have the same token value, but
+the final approval phrase must still match the literal cap entered. It then requires typing exactly:
+
+```text
+APPROVE FULL_64_CHARACTER_SHA256 TOKEN CAP
+```
+
+The request hash, token and literal cap must all match, and approval expires
+five minutes after the quote. Refusal, EOF, interrupted input, a changed request
+file, or an expired approval launches no payment. Approval is not inferred from
+wallet balances or from any prior quote. Price may change between quote and
+purchase; buy enforces the human's approved cap. A person must review any new
+attempt independently, especially after ambiguous settlement.
+
+Only OS session context (`PATH`, `HOME`, `LANG`, `DBUS_SESSION_BUS_ADDRESS`,
+`XDG_RUNTIME_DIR`) is forwarded so buy can access its existing default account
+and **system keychain**. No Node options, API credentials, private-key environment
+variables, BUY_HOME overrides, or file-keystore backend selector are forwarded.
+Custom wallet directories/accounts and file-keystore mode are intentionally not
+supported in this first implementation. Honeyguider does not inspect the
+wallet; buy owns all supported local key access.
+
+A receipt directory is mode 0700 and files are exclusively created mode 0600:
+
+- `request.json`: exact approved bytes; `quote.stdout`/`quote.stderr`: private
+  streamed quote diagnostics (at most 128 KiB per stream). `quote-outcome.json`
+  identifies failure, interruption, timeout, or truncated output. Overflow kills
+  the quote process group and rejects it before any payment approval; partial
+  or truncated quotes are never used for pricing. Reads are fixed 16 KiB chunks,
+  avoiding unbounded memory capture and limiting retained disk diagnostics.
+- `approval.json`: approved hash/token/cap, endpoint, executable/version and time.
+- `attempt.json`: durable launch intent, written **before** the single paid
+  subprocess invocation. A starting record alone means settlement is unknown.
+- `stdout.bin`, `stderr.bin`, `headers.bin`: complete raw paid-attempt evidence,
+  retained even if exit status, completion parsing or plan validation fails.
+- `outcome.json`: command outcome and exit status, with settlement explicitly
+  unknown. Valid-format transaction and correlation/request identifiers found
+  in response headers are recorded as **unverified claims**, not proof of payment.
+- `validation.json`: completion/plan validation success or failure, if reached.
+
+Do not publish raw files: provider bodies, stderr or headers may contain sensitive
+information. They are not echoed to the terminal. Payment stdout/stderr remain
+complete raw captures; only unpaid quote diagnostics have a prefix limit.
+
+Before launch, Honeyguider fsyncs the receipt directory's entry in its parent,
+request bytes and header/output placeholders, approval and launch intent. Every
+JSON record is file-fsynced, then its containing directory is fsynced. The final
+`attempt.json` directory barrier precedes Popen. A pre-launch filesystem error
+stops execution. After launch, raw files and outcome/validation records are
+synced, and any error stops processing without another invocation. This uses
+[the separate file/directory fsync requirements](https://man7.org/linux/man-pages/man2/fsync.2.html),
+not a transaction journal. Filesystem/hardware behavior and successful fsync
+completion remain prerequisites for durability. Missing or partial records are
+**never evidence that no payment occurred**. A durable starting intent, by itself,
+means settlement UNKNOWN; disk failures may prevent even final error bookkeeping.
+
+On POSIX, SIGINT and SIGTERM handlers installed before Popen only set a
+cancellation flag; they do not raise exceptions inside process creation. Once
+Popen returns and assigns the child handle, pending cancellation kills its
+process group and reaps the leader. After launch the supervisor uses
+50 ms polling slices (not hard OS response deadlines), keeps non-raising
+handlers through cleanup, and restores the prior
+handlers afterwards. This closes the signal-exception handle-assignment window
+explained in [Python's signal documentation](https://docs.python.org/3/library/signal.html#note-on-signal-handlers-and-exceptions).
+Timeouts (120 seconds for payment, 30 for quotes), interruption and output-limit
+failures never cause a retry. Quote supervision uses the same launch protection.
+Settlement remains UNKNOWN after interruptions even if the child exits normally.
+
+This is main-thread POSIX supervision, not a kernel service manager. SIGKILL,
+interpreter/host crashes, or other exception-raising signal handlers can bypass
+Python cleanup. A stuck OS spawn may delay access to the child handle; pending
+SIGINT/SIGTERM cancellation is acted on once spawn returns. Descendants that
+intentionally leave the process group cannot be supervised by group termination.
+An uninterruptible kernel wait may delay reaping. No local cleanup can reverse
+a payment already submitted, and no missing record authorizes another attempt.
+Inspect all available local and buy evidence before any independent new approval.
+
+The supported completion is a JSON object containing exactly one
+`choices[0]` with `index: 0`, `finish_reason: "stop"` and an assistant message
+whose `content` is a JSON plan string, without tool calls or a refusal. Standard
+OpenAI metadata fields are accepted with type checks; unsupported fields and
+response shapes fail closed. The complete envelope is bounded to 128 KiB for
+parsing (raw capture remains complete), then `planning.validate_plan()` enforces
+the original schema, graph and citation constraints. Markdown fences and code
+reconstruction are not accepted. Successful output shows the dependency-aware
+next action, labeled an AI-generated, unverified recommendation; no model command
+is executed and demo progress remains in legacy `.pathf1ndar/state.json`.
+
+**Live-test limitations:** no paid Cencori response has been captured in this
+phase. Installed buy source confirms body-on-stdout and response-header capture,
+but the gateway's exact optional completion fields, settlement headers and
+correlation identifiers still need a separately authorized live test. Opaque
+receipts remain preserved if those shapes differ. Identifier extraction does
+not verify on-chain settlement, and buy exit 0 is not treated as payment proof.
+A body that fails strict validation is never repaired or repaid automatically.
