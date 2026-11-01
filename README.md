@@ -146,10 +146,11 @@ Live research requires network access. Installation and offline tests require
 no API credentials, blockchain funds or wallet access.
 
 **Live-payment limitation:** the separate `infer` command is experimental, can
-spend real funds, and requires explicit interactive approval. No paid Cencori
-response or on-chain settlement has been verified by this project's offline
-tests. Do not run `infer` to verify installation; review the detailed limitations
-below before considering any live use.
+spend real funds, and requires explicit interactive approval. The first captured
+paid Cencori inference returned an incomplete completion and was rejected; its
+Celo transaction was reported successful. Offline tests do not verify live
+inference or settlement. Do not run `infer` to verify installation; review the
+detailed limitations below before considering any live use.
 
 Keep private prepared requests in `requests/`, receipts in `receipts/`, and
 custom state in `.honeyguider/` (or use the default `.pathf1ndar/`). These locations
@@ -478,9 +479,10 @@ plan citations come only from page URLs in that request. This checks internal
 consistency; it does not cryptographically attest that a manually authored file
 was retrieved from the web. Review prepared files before approving them.
 
-The following is a **paid command**, provided for review and later authorized
+The following is a **paid command**, provided for review and independently authorized
 live testing. Do not run it merely to verify installation; use `infer --help`
-and pytest for offline checks. No real payment was used to test this phase.
+and pytest for offline checks. Automated tests use synthetic responses and mocked
+payments; the separately captured live attempt is described below.
 
 ```bash
 .venv/bin/honeyguider infer --help
@@ -613,20 +615,58 @@ The supported completion is a JSON object containing exactly one
 `choices[0]` with `index: 0`, `finish_reason: "stop"` and an assistant message
 whose `content` is a JSON plan string, without tool calls or a refusal. Standard
 OpenAI metadata fields are accepted with type checks; unsupported fields and
-response shapes fail closed. The complete envelope is bounded to 128 KiB for
+response shapes fail closed. Cencori's optional top-level `safety` object is
+supported narrowly: it must contain exactly `scanned`, with a JSON boolean
+(`true` or `false`). Missing `scanned`, nulls, numeric/string substitutes and
+additional safety fields (including `input` verdicts) remain unsupported.
+[Cencori's safety documentation](https://cencori.com/docs/api/chat#safety-classification)
+describes `scanned: false` as passthrough without scanning. Neither boolean
+value is proof that the response is safe, the plan is valid, or payment settled;
+the field does not affect plan validation or authorize execution.
+
+The complete envelope is bounded to 128 KiB for
 parsing (raw capture remains complete), then `planning.validate_plan()` enforces
 the original schema, graph and citation constraints. Markdown fences and code
-reconstruction are not accepted. Successful output shows the dependency-aware
+reconstruction are not accepted. Incomplete completions, including
+`finish_reason: "length"`, remain invalid even with well-formed safety metadata
+or syntactically complete plan JSON. Successful output shows the dependency-aware
 next action, labeled an AI-generated, unverified recommendation; no model command
 is executed and demo progress remains in legacy `.pathf1ndar/state.json`.
 
-**Live-test limitations:** no paid Cencori response has been captured in this
-phase. Installed buy source confirms body-on-stdout and response-header capture,
-but the gateway's exact optional completion fields, settlement headers and
-correlation identifiers still need a separately authorized live test. Opaque
-receipts remain preserved if those shapes differ. Identifier extraction does
-not verify on-chain settlement, and buy exit 0 is not treated as payment proof.
-A body that fails strict validation is never repaired or repaid automatically.
+**First captured paid inference and limitations:** the operator reported these
+selected response fields from the first live Cencori paid attempt:
+
+```json
+{
+  "model": "maximo-atlas-1.3",
+  "safety": {"scanned": false},
+  "choices": [{"finish_reason": "length"}],
+  "usage": {"completion_tokens": 1024}
+}
+```
+
+The request allowed 1,024 output tokens and used all 1,024. Honeyguider rejected
+the response: `safety` was previously an unsupported top-level field, and
+`finish_reason: "length"` independently marks an incomplete completion. The
+compatibility change accepts the narrow safety metadata shape; it does not make
+that captured response valid or recover a usable plan. Private receipts remain
+outside this repository; regressions use synthetic data, not private captures.
+
+Request preparation already supports `--max-tokens 4096`, alongside 256 and
+1024 (the unchanged default). A larger budget may avoid this particular token
+limit but cannot guarantee a complete or valid plan. Changing a request changes
+its bytes/hash and requires a fresh quote and independent interactive approval
+for any future paid attempt. There is no automatic budget escalation or retry.
+
+The Celo transaction was reported successful, but an on-chain transaction alone
+does not establish verified application-level settlement: Honeyguider has not
+verified that the gateway settled the approved request and delivered a valid
+plan. Outcome records keep `settlement: "unknown"`; response-header identifiers
+are unverified claims, and buy exit 0 is not payment proof. This change performs
+no chain verification or new live inference. Other gateway completion metadata,
+settlement headers and correlation identifiers remain only partially observed;
+unsupported shapes fail closed and raw evidence is preserved. A body that fails
+strict validation is never repaired or repaid automatically.
 
 ## Offline AI plan tracking (opt-in)
 
