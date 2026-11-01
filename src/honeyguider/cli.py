@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import paid
+from .track_cli import app as track_app
 from .checks import inspect_environment
 from .demo import TASKS
 from .model import blockers, next_task
@@ -17,6 +18,7 @@ from .planning import PlanError, build_plan, next_action, task_state, validate_c
 from .cencori import CencoriError, ENDPOINT, build_request, preserve_request, quote_request, trusted_buy
 
 app = typer.Typer(no_args_is_help=True, help="Navigate a deterministic offline development plan.")
+app.add_typer(track_app, name="track")
 console = Console(markup=False)
 
 

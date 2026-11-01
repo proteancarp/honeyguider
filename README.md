@@ -124,7 +124,8 @@ not an authoritative event checklist. Its documentation references are
 verified by this program. Eligibility, deadlines, SDK details and actual
 submission rules must be checked against current official event materials.
 Automatic implementation remains outside this MVP. Paid AI planning is available
-only through the explicitly approved `infer` workflow below.
+only through the explicitly approved `infer` workflow below. An existing successful
+receipt can be imported for offline progress tracking with `track`.
 
 ## Dependency planning (Phase 3A)
 
@@ -178,7 +179,8 @@ reported; a plan can use successfully retrieved evidence but exits with code 1.
 Truncated evidence and page warnings remain visible. Evidence and provider
 output are untrusted data: the planner executes no commands, source examples,
 transactions, or provider instructions. There are no AI/paid API calls, new
-dependencies, automatic implementation, or cross-session planning persistence.
+dependencies or automatic implementation. This `plan` command has no cross-session
+planning persistence; the separate opt-in `track` workflow below imports AI receipts.
 Tests exercise the provider and CLI with offline fixtures and mocked research.
 
 ## Cencori request preparation and unpaid quotes (Phase 3B.1)
@@ -520,3 +522,62 @@ correlation identifiers still need a separately authorized live test. Opaque
 receipts remain preserved if those shapes differ. Identifier extraction does
 not verify on-chain settlement, and buy exit 0 is not treated as payment proof.
 A body that fails strict validation is never repaired or repaid automatically.
+
+## Offline AI plan tracking (opt-in)
+
+Import an **existing successful private inference receipt**. These commands make
+no network requests, invoke no subprocesses, access no wallets, send no payments,
+and execute no task actions. No new inference is needed or triggered.
+
+```bash
+.venv/bin/honeyguider track import --receipt-dir receipts/cencori-attempt-001
+.venv/bin/honeyguider track show
+.venv/bin/honeyguider track next
+.venv/bin/honeyguider track done TASK_ID
+.venv/bin/honeyguider track status
+
+# Choose a separate new tracking directory for another plan:
+.venv/bin/honeyguider track --state-dir .honeyguider/another-plan import \
+  --receipt-dir receipts/cencori-attempt-002
+```
+
+`import` checks matching approval/launch/outcome records, request SHA-256, exit
+status zero, and a successful validation record. It then independently reruns
+`paid.load_request()` and `paid.parse_completion()` on the saved request and raw
+completion, including bounded evidence, instruction, citation and dependency
+validation. `validation.json` alone never establishes validity. Missing, corrupt,
+unsupported, shared-permission or symlinked required files are refused. The
+receipt directory must be private (0700) and required files private (0600).
+Quote diagnostics, stderr and headers are not imported or used to prove validity.
+Receipt files are read only; import starts with no completed tasks.
+
+`show` displays the full graph as task dependency lists, including actions,
+citations, required/optional classifications and ready/blocked/completed states.
+`next` selects an unblocked task needed by required work, including optional
+prerequisites, and stops when all required tasks are complete. Optional-only
+work remains visible and can be completed manually. `done` rejects unknown or
+duplicate completions and unfinished prerequisite chains. `status` reports
+required and overall progress plus each task's blockers. Completion is entirely
+self-reported; AI recommendations and citation entailment remain unverified.
+
+Tracking defaults to `.honeyguider/track/`, separate from the global demo
+`--state-file` and legacy `.pathf1ndar/state.json`. Import refuses **any existing
+destination**, even an empty directory. There is no reset, migration or overwrite.
+`tracking.py` stores a schema-version-1 snapshot in `000000.json`, then one new
+immutable revision per completion. Each revision contains the validated plan,
+allowed sources, receipt path, request/completion hashes and completion IDs.
+Files are created privately, fsynced, and published atomically using an exclusive
+hard link; the directory is then fsynced. Earlier revisions are never replaced.
+Every read validates the schema, graph, completion chain and complete revision
+history. These private files may contain sensitive task text: keep them out of Git.
+
+This storage requires a local POSIX filesystem supporting hard links and fsync.
+Concurrent writers are not supported; exclusive publication prevents clobbering,
+and a conflicting command fails. A crash can leave an empty import directory or
+an unexpected pending file; reads fail closed rather than automatically repairing
+history. Inspect and preserve such files before choosing a new destination.
+Durability depends on the filesystem; snapshots and hashes do not authenticate
+receipt authorship, web provenance, task correctness or payment settlement.
+Tracking checks local consistency without verifying settlement on-chain. The
+receipt need not remain available after import. Offline tests use synthetic
+receipts and do not demonstrate live inference or payment success.
