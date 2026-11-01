@@ -32,7 +32,7 @@ def infer(
     """Interactively approve at most one paid Cencori request from saved bytes."""
     try:
         result = paid.infer(request_file, buy_executable, receipt_dir, token,
-                            lambda question: typer.prompt(question),
+                            lambda question: typer.prompt(question, default='', show_default=False),
                             lambda text: console.print(text, highlight=False))
     except CencoriError as exc:
         console.print(clean(str(exc)), highlight=False)

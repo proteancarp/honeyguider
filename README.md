@@ -534,19 +534,43 @@ at most six decimal places and a fixed conservative pilot ceiling of **0.05
 token units**. A selected-token quote above that ceiling is rejected, not used
 to raise the ceiling. The human cap must equal a freshly quoted selected-token
 offer exactly in value; both smaller and larger caps are refused. Equivalent
-decimal spellings such as `0.01` and `0.010000` have the same token value, but
-the final approval phrase must still match the literal cap entered. It then requires typing exactly:
+decimal spellings such as `0.01` and `0.010000` have the same token value.
+
+Only after the fresh quote and cap pass validation does Honeyguider generate an
+eight-character uppercase hexadecimal approval code using Python's
+cryptographically secure `secrets` module. Each interactive session gets a fresh
+code. Before confirmation, the terminal displays the full request SHA-256,
+endpoint, network, quoted amount(s), selected token, potential payment recipients
+and maximum authorized spend. For example (illustrative code and quote):
 
 ```text
-APPROVE FULL_64_CHARACTER_SHA256 TOKEN CAP
+Fresh unpaid quote for SHA-256 <full 64-character request digest>; POST https://gateway.usebuy.ai/cencori/v1/chat/completions
+Untrusted offer: 0.01 USDC on Celo; recipient 0x1111111111111111111111111111111111111111
+Maximum spend in human-readable USDC units (from the quote): 0.01
+Maximum authorized spend: 0.01 USDC
+One paid request may settle even if the response fails. No automatic retries.
+Session approval code: A1B2C3D4
+Type the displayed approval code exactly: A1B2C3D4
 ```
 
-The request hash, token and literal cap must all match, and approval expires
-five minutes after the quote. Refusal, EOF, interrupted input, a changed request
-file, or an expired approval launches no payment. Approval is not inferred from
-wallet balances or from any prior quote. Price may change between quote and
-purchase; buy enforces the human's approved cap. A person must review any new
-attempt independently, especially after ambiguous settlement.
+Type the current code exactly, including case. It is for deliberate human
+confirmation, **not authentication** or a replacement for the request's
+cryptographic identity or payment checks. The full request SHA-256 is still
+independently computed from the saved request bytes; those bytes are checked
+again after confirmation, and the exact originally hashed bytes are submitted.
+The code is kept only in memory and displayed in the terminal; Honeyguider does
+not write it to receipt files or logs. There is no approval-code flag or
+environment variable, and piped stdin cannot authorize payment. The old
+`APPROVE <FULL_SHA256> <TOKEN> <CAP>` phrase is no longer accepted.
+
+An incorrect, empty or previous-session code, EOF, interrupted input, a changed
+request file, or approval more than five minutes after the quote launches no
+payment. Approval is not inferred from wallet balances or from any prior quote.
+Price may change between quote and purchase; buy enforces the human's approved
+cap. Payment may settle even if inference or response validation fails, and
+settlement remains unknown in local records. There is no automatic retry or
+payment resumption. A person must review any new attempt independently with a
+fresh quote and code, especially after ambiguous settlement.
 
 Only OS session context (`PATH`, `HOME`, `LANG`, `DBUS_SESSION_BUS_ADDRESS`,
 `XDG_RUNTIME_DIR`) is forwarded so buy can access its existing default account
