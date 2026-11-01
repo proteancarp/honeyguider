@@ -6,6 +6,111 @@ tools, and track progress in local JSON; no account or wallet is needed.
 
 Open source under the [MIT licence](LICENSE).
 
+## Isolated Streamlit browser demonstration
+
+The optional browser demo reuses `research.research`, `research.extract`,
+`planning.build_plan`, and the existing dependency/progress functions. The
+terminal CLI and payment workflows are unchanged. Streamlit is installed only
+by the deployment requirements; it is not a core CLI dependency.
+
+From the repository root, using Python 3.11+ (Python 3.12 is tested):
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m streamlit run browser_demo/streamlit_app.py
+```
+
+Open **http://localhost:8501**. A working offline example loads automatically,
+exactly once per Streamlit session, with no network requests or payments. It
+uses a pruned copy of paragraphs from the existing Celo documentation test
+capture, shipped as `src/honeyguider/browser_example.html`. The same extractor
+and validated deterministic fixture planner process it. The persistent header
+identifies the bundled capture and says it does not verify current documentation.
+
+The initial workspace puts **Next action** and **Mark step complete** alongside
+a compact dependency roadmap. Completing a step advances the plan; reset clears
+progress. The roadmap shows required/optional classification, completion state,
+and the titles of tasks blocking unfinished work. Action details and full source
+passages expand on demand; the current action's citations remain visible.
+
+Expand **Change source or goal** to edit inputs. To retrieve public documentation,
+uncheck **Use bundled offline documentation capture**, enter a public HTTPS HTML
+URL and development goal, then select **Retrieve and plan**. Displayed results
+retain their submitted context while you edit. Every new submission clears the
+old result and progress, including failed submissions. Errors persist across
+reruns; failures never automatically restore the offline example. Retry through
+the editor or select **Load offline example** to explicitly recover and restore
+the default inputs. Initialization failures also require explicit recovery.
+
+The compact workbench uses honey amber, neutral white and soft surfaces, and
+forest-green text. It uses Streamlit's bundled sans-serif fonts, without external
+font downloads or additional dependencies. Native columns stack on narrow screens,
+with wrapping text and no fixed-height scroll areas. Theme settings live in
+`.streamlit/config.toml`; the small static CSS block is scoped to named application
+containers. No untrusted text enters CSS, HTML or Markdown. Completion history
+retains its original order while passing the shared completion validation.
+
+All planning output is persistently labeled as an **authored deterministic
+demonstration, not AI inference**, including live retrieval results. Tasks are
+an authored scaffold rather than inferred requirements. Validation proves
+schema, dependency graph and citation membership, not semantic correctness.
+Completion is self-reported. Evidence truncation and omissions remain visible;
+code examples are omitted from the browser presentation. Untrusted titles,
+excerpts, goals, citations and errors render as plain text, never unsafe HTML.
+
+The browser adapter imports only research and deterministic planning. It has
+no paid calls, keyring, credential inputs, environment checks, shell execution,
+receipt import, tracking storage, file upload or local-file selection. Do not
+put secrets in goals or URLs. Live requests go from the hosting server to the
+documentation host; goals stay on the server and are used for keyword matching.
+Results and progress live only in Streamlit session memory, with no shared
+result cache or writes to CLI state. Reloading/disconnecting may lose progress.
+This is application-level isolation, not a sandbox for hostile Python code.
+
+Live retrieval retains the CLI's public-IP/DNS pinning and exact-host HTTPS
+restrictions: three pages, six requests, 512 KiB per page, 1 MiB total and a
+20-second network retrieval deadline. DNS and HTTP timeouts remain bounded.
+Failures and deadline expiry display readable errors; successfully retrieved
+partial evidence can still produce a labeled plan. JavaScript-only sites,
+compressed responses, anti-bot pages and cross-host redirects may fail. Parsing
+bounded HTML and rendering occur outside the asynchronous network deadline.
+
+For Streamlit Community Cloud, after **you** publish the reviewed files to a
+GitHub repository, create an app with that repository/branch and entry point
+`browser_demo/streamlit_app.py`. Choose **Python 3.12** in Advanced settings.
+The root `requirements.txt` installs the local package and pinned Streamlit;
+`.streamlit/config.toml` disables usage telemetry and browser exception details
+and retains CORS/XSRF protection. No secrets or system packages are required.
+Deploy from the repository root so the config and local package resolve.
+See Streamlit's official [deployment instructions](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy),
+[dependency rules](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies),
+and [file organization](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/file-organization).
+No Cloud deployment or live retrieval success is implied by offline tests.
+
+Run all tests, including the offline Streamlit UI harness, and check the diff:
+
+```bash
+.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python -m pytest -q
+git diff --check
+```
+
+UI tests skip when Streamlit is absent; install `requirements.txt` to include
+them. Adapter and UI tests use the bundled capture or mocked HTTP/DNS and cover
+one-time initialization, session isolation, ordered completion, source provenance,
+partial retrieval, deadlines, unsafe input, persistent failures, explicit recovery,
+and submitted context without live services. Run the browser-specific checks with:
+
+```bash
+.venv/bin/python -m pytest -q tests/test_browser_demo.py tests/test_browser_ui.py
+```
+
+Streamlit's in-process harness verifies behavior, not pixel placement. For visual
+checks, use a 1366×768 desktop viewport and a shorter 1366×650 viewport to allow
+for browser chrome; the initial action title and completion button should be
+visible without scrolling. At 390×844, the action should precede the roadmap,
+with no horizontal page overflow. Verify keyboard focus and the expanded editor.
+
 ## Core capabilities
 - Follow an offline Celo practice plan with prerequisite checks
 - Inspect local Python, Git, Node.js and npm versions without installing tools
