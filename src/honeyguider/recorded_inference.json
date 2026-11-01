@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "label": "Recorded AI Inference",
+  "goal": "register a service",
+  "model": "maximo-atlas-1.3",
+  "sources": [
+    "https://docs.celo.org/build/agents/8004"
+  ],
+  "network": "Celo Mainnet",
+  "chain_id": 42220,
+  "transaction_hash": "0x4b22baa85c1c57753981163f14703b4c824be553a7ef734091fd808113d9d8d0",
+  "token": "USDC",
+  "authorized_amount": "0.01",
+  "quoted_amount": "0.01",
+  "max_output_tokens": 4096,
+  "prompt_tokens": 1639,
+  "completion_tokens": 1206,
+  "total_tokens": 2845,
+  "finish_reason": "stop",
+  "local_settlement": "unknown",
+  "plan": {
+    "schema_version": 1,
+    "tasks": [
+      {
+        "id": "author-registration-file",
+        "title": "Author the JSON registration file with type, name, description, image, and services endpoints",
+        "action": "Create a JSON registration file using the example structure: set \"type\" to \"https://eips.ethereum.org/EIPS/eip-8004#registration-v1\", fill name, description, and image, and list endpoints under services with name, endpoint, and optional version entries (examples include web, MCP, and A2A). Set x402Support true only if the endpoints accept x402 payments, set active true, and set supportedTrust to [\"reputation\"]. Leave the registrations array empty for the first publish.",
+        "prerequisites": [],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "required"
+      },
+      {
+        "id": "host-registration-file",
+        "title": "Host the registration file at a fetchable HTTPS, IPFS, or data: URI",
+        "action": "Publish the registration JSON anywhere an agent can fetch it \u2014 any HTTPS URL, IPFS, or a data: URI stored on-chain \u2014 since the spec does not mandate a path. Keep the file available so callers and the registry can retrieve it.",
+        "prerequisites": [
+          "author-registration-file"
+        ],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "required"
+      },
+      {
+        "id": "register-from-owner-key",
+        "title": "Call register() from the key that should own the identity and note the receipt",
+        "action": "Execute a register() overload from the address that should own the identity: every overload mints the NFT to msg.sender and writes agentWallet = msg.sender, publishing that key as the payment address and giving it control of setAgentURI, transfers, and other owner-only calls. Capture the transaction receipt because the on-chain agent ID must be read from it rather than from the return value.",
+        "prerequisites": [
+          "host-registration-file"
+        ],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "required"
+      },
+      {
+        "id": "read-agent-id-from-event",
+        "title": "Read the agent ID from the Registered event on the receipt",
+        "action": "Extract the agent ID from the Registered event in the transaction receipt. Do not trust the value register() returns, because that value is _lastId at simulation time and becomes wrong if anyone else registers first.",
+        "prerequisites": [
+          "register-from-owner-key"
+        ],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "required"
+      },
+      {
+        "id": "add-registrations-crossref",
+        "title": "Add the registrations entry linking the file to the on-chain agent ID and registry",
+        "action": "Update the registration file's registrations array with the mined agent ID and the agentRegistry reference (for example {\"agentId\": 12345, \"agentRegistry\": \"eip155:42220:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432\"}) so callers can verify the file and the on-chain entry agree. This follows the documented order: publish the file without registrations, register, then update the file with the returned ID.",
+        "prerequisites": [
+          "read-agent-id-from-event"
+        ],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "required"
+      },
+      {
+        "id": "point-registry-at-file",
+        "title": "Ensure the registry points at the final registration file URI",
+        "action": "Verify the registry's agent URI resolves to the registration file. If the file is hosted on IPFS or as a data: URI, adding the agent ID changed the URI, so call setAgentURI(agentId, newURI) to point the registry at the new one. Gas for this call can be paid in a stablecoin via fee abstraction.",
+        "prerequisites": [
+          "add-registrations-crossref"
+        ],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "required"
+      },
+      {
+        "id": "maintain-payee-wallet",
+        "title": "Adjust the payee with setAgentWallet or unsetAgentWallet if needed",
+        "action": "If the payment address should differ from the owner, call setAgentWallet() with a signature from the new wallet, or unsetAgentWallet() to clear it (the owner can call unset on its own). Note that transferring the agent NFT clears agentWallet, so a new owner must set it again. Ownership is the part that is awkward to undo, so confirm the registering key first.",
+        "prerequisites": [
+          "read-agent-id-from-event"
+        ],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "optional"
+      },
+      {
+        "id": "support-x402-payments",
+        "title": "Enable x402Support in the file if endpoints accept x402 payments",
+        "action": "If the listed service endpoints accept x402 payments, set \"x402Support\": true in the registration file and re-host it, updating the registry with setAgentURI if the URI changed.",
+        "prerequisites": [
+          "read-agent-id-from-event"
+        ],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "optional"
+      },
+      {
+        "id": "retire-service",
+        "title": "Mark the service inactive in the file when retiring it",
+        "action": "When retiring the service, set \"active\": false in the registration file and ensure the registry still points at the updated file, using setAgentURI(agentId, newURI) if the hosted URI changed.",
+        "prerequisites": [
+          "point-registry-at-file"
+        ],
+        "sources": [
+          "https://docs.celo.org/build/agents/8004"
+        ],
+        "classification": "optional"
+      }
+    ]
+  }
+}

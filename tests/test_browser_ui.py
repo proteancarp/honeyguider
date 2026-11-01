@@ -228,3 +228,84 @@ def test_live_goal_is_plain_text_and_replacing_a_plan_resets_progress(monkeypatc
     assert not any("No live retrieval" in item.value for item in app.caption)
     for element in [*app.markdown, *app.get("html")]:
         assert "<img" not in str(element.proto)
+
+
+def test_recorded_showcase_metadata_and_no_mutation():
+    from honeyguider.recorded import EXPLORER
+    app = start()
+    assert not app.exception
+    assert [tab.label for tab in app.tabs] == ['Recorded AI Inference', 'Deterministic playground']
+    assert any('previously completed paid' in item.value for item in app.info)
+    content = texts(app)
+    for expected in ('maximo-atlas-1.3', '1639', '1206', '4096', '0.01 USDC',
+                     'author-registration-file', 'retire-service'):
+        assert expected in content
+    assert any('settlement record remains unknown' in item.value for item in app.caption)
+    assert any(item.proto.url == EXPLORER for item in app.get('link_button'))
+    assert not app.tabs[0].button
+    complete(app)
+    assert 'Blockers: none; ready to start' in texts(app)
+    assert app.session_state['completed'] == ['review-1']
+
+
+def test_recorded_content_uses_plain_text(monkeypatch):
+    from dataclasses import replace
+    from honeyguider import recorded
+    data, plan = recorded.load_recording()
+    payload = '<script>alert(1)</script> [click](https://evil.example)'
+    task = replace(plan.tasks[0], title=payload, action=payload)
+    monkeypatch.setattr(recorded, 'load_recording', lambda: (data, replace(plan, tasks=(task, *plan.tasks[1:]))))
+    app = start()
+    assert not app.exception
+    assert payload in texts(app)
+    for element in [*app.markdown, *app.get('html')]:
+        assert payload not in str(element.proto)
+
+
+def test_recording_load_failure_leaves_playground_working(monkeypatch):
+    from honeyguider import recorded
+    from honeyguider.planning import PlanError
+    def broken():
+        raise PlanError('private detail must not display')
+    monkeypatch.setattr(recorded, 'load_recording', broken)
+    app = start()
+    assert not app.exception
+    assert any('fixture validation failed' in item.value for item in app.error)
+    assert 'private detail' not in texts(app)
+    complete(app)
+    assert app.session_state['completed'] == ['review-1']
+
+
+def test_one_application_heading_with_playground_progress():
+    app = start()
+    for update in (lambda: None, lambda: complete(app),
+                   lambda: app.button(key='reset_progress').click().run()):
+        update()
+        assert not app.exception
+        assert [item.value for item in app.title] == ['Honeyguider']
+        assert not app.tabs[1].title
+
+
+def test_recorded_roadmap_collapses_details_but_keeps_titles_and_status():
+    from honeyguider.recorded import load_recording
+    _, plan = load_recording()
+    app = start()
+    assert not app.exception
+    recorded = app.tabs[0]
+    details = [item for item in recorded.expander if item.label == 'Task details']
+    assert len(details) == 9
+    assert all(not item.proto.expanded for item in details)
+    for number, (task, detail) in enumerate(zip(plan.tasks, details), 1):
+        assert f'{number}. {task.title}' in texts(recorded)
+        assert task.title not in texts(detail)
+        assert task.action in texts(detail)
+        assert 'Prerequisites: ' + (', '.join(task.prerequisites) or 'none') in texts(detail)
+        assert 'Blockers: ' in texts(detail)
+        assert all('Citation: ' + source in texts(detail) for source in task.sources)
+        assert not detail.markdown  # Status badges stay visible outside details.
+    badges = [item.value for item in recorded.markdown]
+    for label, count in [('Required', 6), ('Optional', 3), ('Ready', 1), ('Blocked', 8)]:
+        assert sum(label in value for value in badges) == count
+    # First action remains fully visible as well as available in roadmap details.
+    assert sum(item.value == plan.tasks[0].action for item in recorded.text) == 2
+    assert 'AI-generated next action' in [item.value for item in recorded.subheader]

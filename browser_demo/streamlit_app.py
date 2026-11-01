@@ -4,6 +4,7 @@ import streamlit as st
 from honeyguider.browser_demo import DEFAULT_GOAL, DEFAULT_URL, run_demo
 from honeyguider.planning import PlanError, next_action, task_state, validate_completed
 from honeyguider.research import ResearchError
+from honeyguider.recorded import EXPLORER, SOURCE, load_recording
 
 # Only static, application-owned CSS. Keyed container classes are a supported
 # Streamlit API; no generated classes or internal data-testid selectors.
@@ -210,11 +211,9 @@ def workspace():
 
     result = st.session_state.get("result")
     with header:
-        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-            st.title("Honeyguider", anchor=False)
-            if result:
-                st.badge("Offline example" if result.offline else "Live documentation retrieval",
-                         color="primary" if result.offline else "green")
+        if result:
+            st.badge("Offline example" if result.offline else "Live documentation retrieval",
+                     color="primary" if result.offline else "green")
         if result:
             st.text(result.goal)
         with st.container(key="demo_notice", gap=None):
@@ -248,11 +247,64 @@ def workspace():
         st.caption("Live mode: public HTTPS HTML only, up to three same-host pages, six requests, 1 MiB total and a 20-second retrieval deadline.")
 
 
+def recorded_showcase():
+    st.header("Recorded AI Inference", anchor=False)
+    st.info("Replay of a previously completed paid Cencori inference. No new inference or payment runs here.")
+    try:
+        data, plan = load_recording()
+    except (ValueError, OSError):
+        st.error("The recorded showcase is unavailable: fixture validation failed.")
+        return
+    st.text("Development goal: " + data['goal'])
+    st.link_button("Documentation source", SOURCE)
+    focus, details = st.columns([1.65, 1])
+    with focus, st.container(border=True):
+        st.subheader("AI-generated next action", anchor=False)
+        action = next_action(plan, frozenset())
+        st.text(action.title)
+        st.text(action.action)
+        show_citations(action)
+        st.caption("Recorded starting point. Review recommendations against the documentation before implementing them.")
+    with details:
+        st.text("Model: " + data['model'])
+        st.text(f"Tokens: {data['prompt_tokens']} prompt / {data['completion_tokens']} completion / {data['total_tokens']} total")
+        st.text(f"Maximum output: {data['max_output_tokens']} tokens; finish reason: stop")
+        st.text("Quoted and authorized: 0.01 USDC on Celo Mainnet (42220)")
+        st.link_button("View transaction on Celoscan", EXPLORER)
+        st.caption("The user independently confirmed the transaction on Celoscan. Honeyguider's local settlement record remains unknown; this browser does not verify settlement.")
+    st.subheader("Nine-task dependency roadmap", anchor=False)
+    st.caption("6 required · 3 optional. Read-only replay with no progress changes.")
+    for number, task in enumerate(plan.tasks, 1):
+        with st.container(gap="small"):
+            title, status = st.columns([3, 1])
+            with title:
+                st.text(f"{number}. {task.title}")
+            with status:
+                show_status(task, frozenset())
+            # Static labels only: generated titles and details remain plain text.
+            with st.expander("Task details", expanded=False):
+                st.text("Task ID: " + task.id)
+                st.text("Prerequisites: " + (", ".join(task.prerequisites) or "none"))
+                st.text("Blockers: " + (", ".join(task.prerequisites) or "none; ready to start"))
+                st.text(task.action)
+                show_citations(task)
+    with st.expander("How human approval worked"):
+        st.text("In the local CLI, a person reviewed the prepared request and fresh quote, chose the exact spend cap, and entered a session approval code for one attempt. There were no automatic retries. The saved response then passed request, completion, citation and dependency validation.")
+        st.text("Visitors read a shipped, sanitized fixture only. No wallet connection, private receipts, credentials or payment execution are available in this showcase.")
+        st.text("Validation checks structure and local consistency. It does not establish recommendation correctness, citation entailment or on-chain settlement.")
+
+
 def main():
     st.set_page_config(page_title="Honeyguider · Developer workspace", page_icon="🍯", layout="wide")
     st.html(WORKSPACE_STYLE)
     with st.container(key="workspace"):
-        workspace()
+        st.title("Honeyguider", anchor=False)
+        st.text("Turn development documentation into a source-linked roadmap, with prerequisites and a clear next action.")
+        recorded, playground = st.tabs(["Recorded AI Inference", "Deterministic playground"])
+        with recorded:
+            recorded_showcase()
+        with playground:
+            workspace()
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ honeyguider = "honeyguider.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-honeyguider = ["browser_example.html"]
+honeyguider = ["browser_example.html", "recorded_inference.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
