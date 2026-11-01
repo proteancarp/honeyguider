@@ -1,0 +1,13 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Honeyguider",
+  "description": "A terminal-native Python developer assistant that researches public technical documentation, prepares dependency-aware implementation plans, and tracks progress. Optional Cencori inference uses buy on Celo with explicit human payment approval.",
+  "services": [
+    {
+      "name": "web",
+      "endpoint": "https://github.com/proteancarp/honeyguider"
+    }
+  ],
+  "x402Support": false,
+  "active": true
+}
