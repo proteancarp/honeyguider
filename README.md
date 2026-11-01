@@ -1,8 +1,17 @@
 # Honeyguider
 
 A Python CLI that turns fragmented documentation and hackathon work into a
-clear next step. Start with a deterministic offline practice plan, inspect local
-tools, and track progress in local JSON; no account or wallet is needed.
+clear next step. Honeyguider has completed a successful paid Cencori AI inference:
+local `attempt-005` produced nine validated, source-linked tasks for 0.01 USDC.
+The hosted browser showcase replays that recorded result; visitors cannot run
+paid inference or connect a wallet. New paid inference belongs to the separate
+local CLI workflow, where a person reviews the request and quote and explicitly
+approves one capped payment. Application validation and the user's independent
+Celoscan confirmation are distinct: local settlement status remains `unknown`.
+
+The browser also offers a deterministic playground. Use it or the CLI's offline
+practice plan without an account or wallet; the CLI can inspect local tools and
+track progress in local JSON.
 
 Open source under the [MIT licence](LICENSE).
 
@@ -20,14 +29,15 @@ From the repository root, using Python 3.11+ (Python 3.12 is tested):
 .venv/bin/python -m streamlit run browser_demo/streamlit_app.py
 ```
 
-Open **http://localhost:8501**. A working offline example loads automatically,
-exactly once per Streamlit session, with no network requests or payments. It
-uses a pruned copy of paragraphs from the existing Celo documentation test
-capture, shipped as `src/honeyguider/browser_example.html`. The same extractor
+Open **http://localhost:8501**. The **Recorded AI Inference** tab opens with the
+sanitized replay. In the separate **Deterministic playground** tab, a working
+offline example loads automatically, exactly once per Streamlit session, with no
+network requests or payments. It uses a pruned copy of paragraphs from the existing
+Celo documentation test capture, shipped as `src/honeyguider/browser_example.html`. The same extractor
 and validated deterministic fixture planner process it. The persistent header
 identifies the bundled capture and says it does not verify current documentation.
 
-The initial workspace puts **Next action** and **Mark step complete** alongside
+The playground workspace puts **Next action** and **Mark step complete** alongside
 a compact dependency roadmap. Completing a step advances the plan; reset clears
 progress. The roadmap shows required/optional classification, completion state,
 and the titles of tasks blocking unfinished work. Action details and full source
@@ -50,8 +60,9 @@ with wrapping text and no fixed-height scroll areas. Theme settings live in
 containers. No untrusted text enters CSS, HTML or Markdown. Completion history
 retains its original order while passing the shared completion validation.
 
-All planning output is persistently labeled as an **authored deterministic
-demonstration, not AI inference**, including live retrieval results. Tasks are
+All playground planning output is persistently labeled as an **authored
+deterministic demonstration, not AI inference**, including live retrieval results.
+Tasks are
 an authored scaffold rather than inferred requirements. Validation proves
 schema, dependency graph and citation membership, not semantic correctness.
 Completion is self-reported. Evidence truncation and omissions remain visible;
@@ -750,3 +761,56 @@ receipt authorship, web provenance, task correctness or payment settlement.
 Tracking checks local consistency without verifying settlement on-chain. The
 receipt need not remain available after import. Offline tests use synthetic
 receipts and do not demonstrate live inference or payment success.
+
+## Recorded paid AI inference showcase
+
+The Streamlit browser opens with **Recorded AI Inference**: a read-only replay of
+Cencori's successful local `attempt-005`, turning Celo documentation into a next
+action and nine source-linked tasks (six required, three optional). The recorded
+goal was `register a service`, using
+<https://docs.celo.org/build/agents/8004>. The separate **Deterministic playground**
+retains the bundled offline example, editable goal and URL, bounded public
+retrieval, authored dependency plans, session-only completion and reset. Playground
+plans are deterministic scaffolds, not AI-generated results.
+
+`attempt-005` used `maximo-atlas-1.3`, a 4096-token output limit, 1639 prompt tokens
+and 1206 completion tokens (2845 total), ending with `stop`. The quote and human
+authorization were 0.01 USDC on Celo Mainnet (chain 42220). The transaction is
+[viewable on Celoscan](https://celoscan.io/tx/0x4b22baa85c1c57753981163f14703b4c824be553a7ef734091fd808113d9d8d0).
+The user independently confirmed it on Celoscan. Honeyguider's local settlement
+record remains **unknown**. Successful application-level validation establishes
+request/completion structure, citation membership and graph validity; it does not
+verify on-chain settlement, task correctness or whether citations entail each claim.
+The browser performs no blockchain verification.
+
+The shipped `src/honeyguider/recorded_inference.json` contains the actual nine
+tasks extracted from the private receipt, never a copied response envelope.
+`tools/export_recorded_inference.py` is an offline maintenance utility, outside the
+browser runtime. It reruns `tracking.receipt_state()`, `paid.load_request()` and
+`paid.parse_completion()` (which calls `planning.validate_plan()`), checks the
+quote and approved amount and observed metadata, then constructs an explicit
+public allowlist. It exports no requests, prompts, headers, authorization records,
+wallet details, credentials, session codes, stderr or private paths. Task text was
+reviewed as public documentation guidance. To reproduce locally, with access to
+the original private receipt:
+
+```bash
+PYTHONPATH=src python tools/export_recorded_inference.py \
+  ~/.local/share/honeyguider/payments/attempt-005 > /tmp/recorded_inference.json
+```
+
+The utility only reads receipts and invokes validators; it cannot launch a paid
+attempt. Its public digest must match the reviewed pin in `recorded.py`. Browser
+loading independently enforces exact metadata and schema, validates the plan,
+checks the six/three counts and checks that digest. Changed artifacts fail closed.
+The digest protects artifact consistency, not receipt authorship. Future exports
+require independent review and an explicit pin update.
+
+The local paid workflow required a fresh quote, exact spend cap and human session
+approval for one attempt, with no automatic retries. Browser visitors cannot
+initiate it: the showcase imports no payment, wallet, tracking or execution
+modules, reads only the shipped fixture and writes no showcase state. It requires
+no wallet or credentials. External buttons use application-controlled source and
+explorer constants; generated text uses plain-text rendering. Existing retrieval
+SSRF limits and isolated playground session state remain in place. Tests are
+offline and do not call inference APIs or blockchain services.
