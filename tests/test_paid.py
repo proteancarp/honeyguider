@@ -18,6 +18,13 @@ from honeyguider.planning import PlanError
 from honeyguider.research import Report, extract
 
 URL = 'https://docs.example.com/guide'
+APPROVAL_CODE = 'A1B2C3D4'
+
+
+@pytest.fixture(autouse=True)
+def approval_codes():
+    with patch('honeyguider.paid.secrets.token_hex', return_value=APPROVAL_CODE.lower()) as codes:
+        yield codes
 
 
 @pytest.fixture
@@ -67,10 +74,16 @@ class Process:
 
 
 def execute(prepared, buy, directory, *, raw=None, returncode=0, error=None, answers=None, token='USDC', quote_body=None):
-    path, request = prepared
+    path, _ = prepared
     data = json.dumps(response()).encode() if raw is None else raw
     cap = '0.01'
-    answers = iter(answers or [cap, f'APPROVE {request.sha256} {token} {cap}'])
+    if answers is None:
+        answers = [cap, APPROVAL_CODE]
+    if callable(answers):
+        prompt = answers
+    else:
+        answers = iter(answers)
+        prompt = lambda question: next(answers)
     messages = []
     clock = [0]
     def quoted(arguments, target):
@@ -87,7 +100,7 @@ def execute(prepared, buy, directory, *, raw=None, returncode=0, error=None, ans
         return Process(returncode, error, clock)
     with patch('honeyguider.paid.interactive', return_value=True), patch('honeyguider.cencori._run', return_value=subprocess.CompletedProcess([], 0, b'0.8.4', b'')), patch('honeyguider.paid.capture_quote', side_effect=quoted) as quoting, patch('honeyguider.paid.subprocess.Popen', side_effect=purchase) as purchasing, patch('honeyguider.paid.os.killpg') as killing, (patch('honeyguider.paid.time.monotonic', side_effect=lambda: clock[0]) if isinstance(error, subprocess.TimeoutExpired) else nullcontext()):
         try:
-            result = paid.infer(path, buy, directory, token, lambda question: next(answers), messages.append)
+            result = paid.infer(path, buy, directory, token, prompt, messages.append)
         finally:
             assert purchasing.call_count <= 1
             if error is not None:
@@ -131,7 +144,7 @@ def test_saved_request_rejects_invalid_shape(prepared, kind):
 
 
 @pytest.mark.parametrize('scanned', [None, False, True])
-def test_exact_bytes_quote_and_one_purchase(prepared, buy, tmp_path, monkeypatch, scanned):
+def test_exact_bytes_quote_and_one_purchase(prepared, buy, tmp_path, monkeypatch, scanned, approval_codes):
     monkeypatch.setenv('HOME', '/home/session')
     monkeypatch.setenv('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/session/bus')
     monkeypatch.setenv('NODE_OPTIONS', '--require unsafe')
@@ -168,6 +181,16 @@ def test_exact_bytes_quote_and_one_purchase(prepared, buy, tmp_path, monkeypatch
     assert directory.stat().st_mode & 0o777 == 0o700
     assert all(p.stat().st_mode & 0o777 == 0o600 for p in directory.iterdir())
     assert any(prepared[1].sha256 in text for text in messages)
+    approval_codes.assert_called_once_with(4)
+    assert f'Session approval code: {APPROVAL_CODE}' in messages
+    assert 'Maximum authorized spend: 0.01 USDC' in messages
+    assert any(cencori.ENDPOINT in text for text in messages)
+    assert any('0.01 USDC on Celo; recipient 0x' + '1' * 40 in text for text in messages)
+    assert any('may settle even if the response fails. No automatic retries.' in text for text in messages)
+    # The human confirmation code never enters receipts, argv or the child environment.
+    assert all(APPROVAL_CODE.encode() not in path.read_bytes() for path in directory.iterdir())
+    assert APPROVAL_CODE not in json.dumps(purchasing.call_args.args)
+    assert APPROVAL_CODE not in json.dumps(kwargs['env'])
 
 
 @pytest.mark.parametrize('token', ['USDT', 'USAT'])
@@ -175,17 +198,67 @@ def test_alternative_token_only_when_offered(prepared, buy, tmp_path, token):
     assert execute(prepared, buy, tmp_path / 'attempt', token=token)[0].tasks
 
 
+def test_all_payment_details_precede_confirmation(prepared, buy, tmp_path, approval_codes):
+    envelope = quote()
+    envelope['accepts'].append(dict(envelope['accepts'][0], payTo='0x' + '2' * 40))
+    messages = []
+    def answer(question):
+        if question.startswith('Maximum spend'):
+            approval_codes.assert_not_called()
+            return '0.010000'
+        approval_codes.assert_called_once_with(4)
+        assert any(prepared[1].sha256 in text and cencori.ENDPOINT in text for text in messages)
+        for recipient in ('1', '2'):
+            assert f'Untrusted offer: 0.01 USDC on Celo; recipient 0x{recipient * 40}' in messages
+        assert 'Maximum authorized spend: 0.010000 USDC' in messages
+        assert f'Session approval code: {APPROVAL_CODE}' in messages
+        assert any('may settle even if the response fails. No automatic retries.' in text for text in messages)
+        raise EOFError()
+    with patch('honeyguider.paid.interactive', return_value=True), patch('honeyguider.cencori._run', return_value=subprocess.CompletedProcess([], 0, b'0.8.4', b'')), patch('honeyguider.paid.capture_quote', return_value=json.dumps(envelope).encode()), patch('honeyguider.paid.run_attempt') as attempt:
+        with pytest.raises(EOFError):
+            paid.infer(prepared[0], buy, tmp_path / 'attempt', 'USDC', answer, messages.append)
+    attempt.assert_not_called()
+
+
 @pytest.mark.parametrize('cap', ['0', '-1', 'NaN', 'Infinity', '1e-2', '1000', '0.0000001', '--flag', '', ' 0.01'])
 def test_invalid_amounts(cap):
     with pytest.raises(cencori.CencoriError): paid.amount(cap)
 
 
-@pytest.mark.parametrize('approval', ['no', 'yes', 'APPROVE wronghash USDC 0.01', 'APPROVE {hash} USAT 0.01', 'APPROVE {hash} USDC 1'])
+@pytest.mark.parametrize('approval', ['', 'no', 'yes', APPROVAL_CODE.lower(), ' ' + APPROVAL_CODE,
+                                      APPROVAL_CODE + ' ', 'APPROVE {hash} USDC 0.01',
+                                      'APPROVE wronghash USDC 0.01', 'APPROVE {hash} USAT 0.01',
+                                      'APPROVE {hash} USDC 1'])
 def test_wrong_or_refused_approval_never_purchases(prepared, buy, tmp_path, approval):
     phrase = approval.format(hash=prepared[1].sha256)
     with patch('honeyguider.paid.run_attempt') as attempt:
         with pytest.raises(cencori.CencoriError, match='Approval'):
             execute(prepared, buy, tmp_path / 'attempt', answers=['0.01', phrase])
+    attempt.assert_not_called()
+
+
+def test_previous_session_code_cannot_approve_new_session(prepared, buy, tmp_path, approval_codes):
+    approval_codes.side_effect = [APPROVAL_CODE.lower(), 'e5f6a7b8']
+    _, _, purchase, _, _ = execute(prepared, buy, tmp_path / 'first')
+    assert purchase.call_count == 1
+    directory = tmp_path / 'second'
+    with patch('honeyguider.paid.run_attempt') as attempt:
+        with pytest.raises(cencori.CencoriError, match='this session code'):
+            execute(prepared, buy, directory, answers=['0.01', APPROVAL_CODE])
+    attempt.assert_not_called()
+    assert approval_codes.call_count == 2
+    assert all(call.args == (4,) for call in approval_codes.call_args_list)
+    assert not (directory / 'approval.json').exists()
+    assert not (directory / 'attempt.json').exists()
+    assert all(b'E5F6A7B8' not in path.read_bytes() for path in directory.iterdir())
+
+
+@pytest.mark.parametrize('cap', ['0', '-1', 'NaN', 'Infinity', '1e-2', '0.050001', '', ' 0.01'])
+def test_invalid_cap_never_generates_code_or_pays(prepared, buy, tmp_path, approval_codes, cap):
+    with patch('honeyguider.paid.run_attempt') as attempt:
+        with pytest.raises(cencori.CencoriError, match='Cap must be'):
+            execute(prepared, buy, tmp_path / 'attempt', answers=[cap, APPROVAL_CODE])
+    approval_codes.assert_not_called()
     attempt.assert_not_called()
 
 
@@ -196,11 +269,29 @@ def test_cap_below_quote_never_purchases(prepared, buy, tmp_path):
     attempt.assert_not_called()
 
 
-def test_noninteractive_never_quotes_or_pays(prepared, buy, tmp_path):
-    with patch('honeyguider.paid.interactive', return_value=False), patch('honeyguider.paid.subprocess.run') as run, patch('honeyguider.paid.subprocess.Popen') as popen:
+@pytest.mark.parametrize('stdin_tty,stdout_tty', [(False, False), (False, True), (True, False)])
+def test_noninteractive_never_quotes_or_pays(prepared, buy, tmp_path, stdin_tty, stdout_tty, approval_codes):
+    with patch('honeyguider.paid.sys.stdin.isatty', return_value=stdin_tty), patch('honeyguider.paid.sys.stdout.isatty', return_value=stdout_tty), patch('honeyguider.paid.subprocess.run') as run, patch('honeyguider.paid.subprocess.Popen') as popen:
         with pytest.raises(cencori.CencoriError, match='interactive'):
-            paid.infer(prepared[0], buy, tmp_path / 'attempt', 'USDC', lambda q: 'yes', print)
+            paid.infer(prepared[0], buy, tmp_path / 'attempt', 'USDC', lambda q: APPROVAL_CODE, print)
     run.assert_not_called(); popen.assert_not_called()
+    approval_codes.assert_not_called()
+
+
+@pytest.mark.parametrize('cancellation', [EOFError, KeyboardInterrupt])
+@pytest.mark.parametrize('stage', ['cap', 'code'])
+def test_cancelled_input_never_pays(prepared, buy, tmp_path, cancellation, stage):
+    directory = tmp_path / 'attempt'
+    def answer(question):
+        if stage == 'code' and question.startswith('Maximum spend'):
+            return '0.01'
+        raise cancellation()
+    with patch('honeyguider.paid.run_attempt') as attempt:
+        with pytest.raises(cancellation):
+            execute(prepared, buy, directory, answers=answer)
+    attempt.assert_not_called()
+    assert not (directory / 'approval.json').exists()
+    assert not (directory / 'attempt.json').exists()
 
 
 def test_missing_or_incompatible_buy(prepared, buy, tmp_path):
@@ -353,28 +444,47 @@ def test_raw_response_precedes_plan_validation(prepared, buy, tmp_path):
         execute(prepared, buy, directory)
 
 
-def test_request_change_during_approval_aborts(prepared, buy, tmp_path):
+@pytest.mark.parametrize('canonical', [False, True])
+def test_request_change_during_approval_aborts(prepared, buy, tmp_path, canonical):
     original = paid.load_request
     calls = 0
     def modified(path):
         nonlocal calls
         calls += 1
-        if calls == 2: path.write_bytes(b'changed')
+        if calls == 2:
+            body = json.loads(prepared[1].body)
+            body['max_tokens'] = 256  # Valid canonical request, different exact bytes.
+            path.write_bytes(paid.canonical(body) if canonical else b'changed')
         return original(path)
     with patch('honeyguider.paid.load_request', side_effect=modified), patch('honeyguider.paid.run_attempt') as attempt:
         with pytest.raises(cencori.CencoriError): execute(prepared, buy, tmp_path / 'attempt')
     attempt.assert_not_called()
 
 
-def test_cli_noninteractive_and_refusal(prepared, buy, tmp_path):
+@pytest.mark.parametrize('approval_input', ['no\n', '\n' + APPROVAL_CODE + '\n', ''])
+def test_cli_noninteractive_and_refusal(prepared, buy, tmp_path, approval_input):
     args = ['infer', '--request-file', str(prepared[0]), '--buy-executable', str(buy), '--receipt-dir', str(tmp_path / 'attempt')]
     with patch('honeyguider.paid.interactive', return_value=False), patch('honeyguider.paid.subprocess.Popen') as popen:
         assert CliRunner().invoke(app, args).exit_code == 1
     popen.assert_not_called()
     with patch('honeyguider.paid.interactive', return_value=True), patch('honeyguider.cencori._run', return_value=subprocess.CompletedProcess([], 0, b'0.8.4', b'')), patch('honeyguider.paid.capture_quote', return_value=json.dumps(quote()).encode()), patch('honeyguider.paid.subprocess.Popen') as popen:
-        result = CliRunner().invoke(app, args, input='0.01\nno\n')
+        result = CliRunner().invoke(app, args, input='0.01\n' + approval_input)
     assert result.exit_code == 1
     popen.assert_not_called()
+    assert not (tmp_path / 'attempt' / 'approval.json').exists()
+
+
+def test_piped_code_and_environment_cannot_authorize(prepared, buy, tmp_path, monkeypatch, approval_codes):
+    monkeypatch.setenv('HONEYGUIDER_APPROVAL_CODE', APPROVAL_CODE)
+    monkeypatch.setenv('APPROVAL_CODE', APPROVAL_CODE)
+    args = ['infer', '--request-file', str(prepared[0]), '--buy-executable', str(buy), '--receipt-dir', str(tmp_path / 'attempt')]
+    with patch('honeyguider.paid.capture_quote') as quoting, patch('honeyguider.paid.subprocess.Popen') as popen:
+        result = CliRunner().invoke(app, args, input='0.01\n' + APPROVAL_CODE + '\n')
+    assert result.exit_code == 1
+    assert 'requires active interactive stdin and stdout' in result.output
+    quoting.assert_not_called()
+    popen.assert_not_called()
+    approval_codes.assert_not_called()
 
 
 def test_cli_labels_ai_plan_and_shows_only_next_action(prepared, buy, tmp_path):
@@ -422,26 +532,27 @@ def test_paid_plan_duplicate_keys_are_rejected(scanned):
 
 
 @pytest.mark.parametrize('price', ['50001', '100000', '1000000'])
-def test_pilot_quote_ceiling_never_prompts_or_pays(prepared, buy, tmp_path, price):
+def test_pilot_quote_ceiling_never_prompts_or_pays(prepared, buy, tmp_path, price, approval_codes):
     with patch('honeyguider.paid.run_attempt') as attempt:
         with pytest.raises(cencori.CencoriError, match='0.05 pilot ceiling'):
             execute(prepared, buy, tmp_path / 'attempt', quote_body=quote(price=price))
     attempt.assert_not_called()
+    approval_codes.assert_not_called()
 
 
 @pytest.mark.parametrize('cap', ['0.009', '0.02', '0.05'])
-def test_cap_must_equal_fresh_offer_not_just_cover_it(prepared, buy, tmp_path, cap):
+def test_cap_must_equal_fresh_offer_not_just_cover_it(prepared, buy, tmp_path, cap, approval_codes):
     with patch('honeyguider.paid.run_attempt') as attempt:
         with pytest.raises(cencori.CencoriError, match='match.*exactly'):
-            execute(prepared, buy, tmp_path / 'attempt', answers=[cap, 'unused'])
+            execute(prepared, buy, tmp_path / 'attempt', answers=[cap, APPROVAL_CODE])
+    approval_codes.assert_not_called()
     attempt.assert_not_called()
 
 
 def test_pilot_ceiling_and_equivalent_decimal_values(prepared, buy, tmp_path):
     cap = '0.050000'
-    approval = f'APPROVE {prepared[1].sha256} USDC {cap}'
     plan, _, purchase, _, _ = execute(prepared, buy, tmp_path / 'attempt',
-                                     answers=[cap, approval], quote_body=quote(price='50000'))
+                                     answers=[cap, APPROVAL_CODE], quote_body=quote(price='50000'))
     assert plan.tasks and purchase.call_count == 1
     assert purchase.call_args.args[0][4] == cap
     with pytest.raises(cencori.CencoriError):

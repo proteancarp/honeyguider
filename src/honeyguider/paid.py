@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import selectors
 import signal
 import subprocess
@@ -419,10 +420,12 @@ def infer(request_file, executable, receipt_dir, token, prompt, display):
     cap = amount(prompt(f'Maximum spend in human-readable {token} units (from the quote)'))
     if not any(Decimal(offer['price']) == Decimal(cap) for offer in selected):
         raise cencori.CencoriError('Approved cap must match a freshly quoted selected-token offer exactly; no payment attempted')
-    phrase = f'APPROVE {request_hash} {token} {cap}'
-    display('One paid request may settle even if the response fails. No automatic retries. Type exactly: ' + phrase)
-    if prompt('Approval') != phrase:
-        raise cencori.CencoriError('Approval refused or does not match the exact hash, token and cap')
+    approval_code = secrets.token_hex(4).upper()
+    display(f'Maximum authorized spend: {cap} {token}')
+    display('One paid request may settle even if the response fails. No automatic retries.')
+    display('Session approval code: ' + approval_code)
+    if prompt('Type the displayed approval code exactly') != approval_code:
+        raise cencori.CencoriError('Approval refused or does not match this session code; no payment attempted')
     if time.monotonic() - quoted_at > 300:
         raise cencori.CencoriError('Quote approval expired; no payment attempted')
     # File tampering cannot change the in-memory bytes, but fail closed anyway.
