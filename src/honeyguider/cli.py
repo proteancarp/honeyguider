@@ -17,7 +17,7 @@ from .research import clean, research as research_pages
 from .planning import PlanError, build_plan, next_action, task_state, validate_completed
 from .cencori import CencoriError, ENDPOINT, build_request, preserve_request, quote_request, trusted_buy
 
-app = typer.Typer(no_args_is_help=True, help="Navigate a deterministic offline development plan.")
+app = typer.Typer(no_args_is_help=False, help="Explore an offline demo, research documentation, and navigate local plans.")
 app.add_typer(track_app, name="track")
 console = Console(markup=False)
 
@@ -179,9 +179,16 @@ def research(url: str, goal: Annotated[str, typer.Option("--goal", help="Words u
 
 
 # Retain the legacy directory so the rename continues to find existing progress.
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(ctx: typer.Context, state_file: Annotated[Path, typer.Option("--state-file", help="Local progress JSON file.")] = Path(".pathf1ndar/state.json")):
     ctx.obj = state_file
+    if ctx.invoked_subcommand is None:
+        from .welcome import interactive_terminal, welcome
+
+        if not interactive_terminal():
+            console.print(ctx.get_help())
+            raise typer.Exit(2)
+        welcome(ctx)
 
 
 def read(ctx: typer.Context) -> dict:
@@ -205,6 +212,7 @@ def write(ctx: typer.Context, state: dict):
 
 @app.command()
 def explore(ctx: typer.Context, demo: Annotated[bool, typer.Option(help="Load the offline Celo practice plan.")] = False):
+    """Initialize or resume the offline demo, preserving progress."""
     if not demo:
         console.print("Only offline exploration is available. Use explore --demo.")
         raise typer.Exit(2)
@@ -218,6 +226,7 @@ def explore(ctx: typer.Context, demo: Annotated[bool, typer.Option(help="Load th
 
 @app.command()
 def check(ctx: typer.Context):
+    """Inspect local tool versions and save a read-only check snapshot."""
     state = read(ctx)
     state["checks"] = inspect_environment()
     write(ctx, state)
@@ -231,6 +240,7 @@ def check(ctx: typer.Context):
 
 @app.command(name="next")
 def next_command(ctx: typer.Context):
+    """Show the next actionable demo task with full details and citations."""
     state = read(ctx)
     task = next_task(TASKS, state["completed"], state["checks"])
     if task:
@@ -246,6 +256,7 @@ def next_command(ctx: typer.Context):
 
 @app.command()
 def done(ctx: typer.Context, task_id: str):
+    """Record self-reported demo task completion after prerequisites."""
     state = read(ctx)
     task = next((t for t in TASKS if t.id == task_id), None)
     if task is None:
@@ -265,6 +276,7 @@ def done(ctx: typer.Context, task_id: str):
 
 @app.command()
 def status(ctx: typer.Context):
+    """Show demo progress, task readiness and blockers."""
     state = read(ctx)
     console.print(f"Celo demo: {len(state['completed'])}/{len(TASKS)} complete")
     table = Table("Task", "Status", "Blockers")
