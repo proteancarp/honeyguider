@@ -130,13 +130,18 @@ def test_saved_request_rejects_invalid_shape(prepared, kind):
         paid.load_request(path)
 
 
-def test_exact_bytes_quote_and_one_purchase(prepared, buy, tmp_path, monkeypatch):
+@pytest.mark.parametrize('scanned', [None, False, True])
+def test_exact_bytes_quote_and_one_purchase(prepared, buy, tmp_path, monkeypatch, scanned):
     monkeypatch.setenv('HOME', '/home/session')
     monkeypatch.setenv('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/session/bus')
     monkeypatch.setenv('NODE_OPTIONS', '--require unsafe')
     monkeypatch.setenv('UPSTREAM_API_KEY', 'never-forward')
     directory = tmp_path / 'attempt'
-    plan, quoting, purchasing, _, messages = execute(prepared, buy, directory)
+    data = response()
+    if scanned is not None:
+        data['safety'] = {'scanned': scanned}
+    raw = json.dumps(data).encode()
+    plan, quoting, purchasing, _, messages = execute(prepared, buy, directory, raw=raw)
     assert plan.tasks[0].id == 'review'
     assert quoting.call_count == purchasing.call_count == 1
     for call in [quoting.call_args, purchasing.call_args]:
@@ -153,7 +158,7 @@ def test_exact_bytes_quote_and_one_purchase(prepared, buy, tmp_path, monkeypatch
     purchase = purchasing.call_args.args[0]
     assert purchase[1:7] == ['--json', 'curl', '--max-amount', '0.01', '--token', 'USDC']
     assert (directory / 'request.json').read_bytes() == prepared[1].body
-    assert (directory / 'stdout.bin').read_bytes() == json.dumps(response()).encode()
+    assert (directory / 'stdout.bin').read_bytes() == raw
     outcome = json.loads((directory / 'outcome.json').read_bytes())
     assert outcome['request_sha256'] == prepared[1].sha256
     assert outcome['claimed_transaction_hash'] == '0x' + 'a' * 64
@@ -220,26 +225,98 @@ def test_quote_refusals(kind):
     with pytest.raises(cencori.CencoriError): paid.offers(raw, 'USDC')
 
 
-@pytest.mark.parametrize('kind', ['choices', 'content', 'role', 'finish', 'tool', 'choice-index', 'duplicate', 'non-json-plan', 'cycle', 'citation', 'oversized', 'non-finite'])
-def test_invalid_completion_envelopes_and_plans(kind):
+@pytest.mark.parametrize('scanned', [None, False, True])
+@pytest.mark.parametrize('kind', ['choices', 'content', 'role', 'finish', 'tool', 'refusal', 'choice-index', 'duplicate', 'non-json-plan', 'schema', 'task-field', 'cycle', 'missing-dependency', 'citation', 'model', 'unknown-field', 'oversized', 'non-finite', 'non-finite-plan'])
+def test_invalid_completion_envelopes_and_plans(kind, scanned):
     data = response()
+    if scanned is not None:
+        data['safety'] = {'scanned': scanned}
     if kind == 'choices': data['choices'] = []
     if kind == 'content': data['choices'][0]['message']['content'] = [{'text': 'unsupported'}]
     if kind == 'role': data['choices'][0]['message']['role'] = 'user'
     if kind == 'finish': data['choices'][0]['finish_reason'] = 'length'
     if kind == 'tool': data['choices'][0]['message']['tool_calls'] = []
+    if kind == 'refusal': data['choices'][0]['message']['refusal'] = 'Cannot comply'
     if kind == 'choice-index': data['choices'][0]['index'] = True
-    if kind in ('cycle', 'citation'):
+    if kind == 'model': data['model'] = 'unexpected-model'
+    if kind == 'unknown-field': data['unexpected'] = {'scanned': False}
+    if kind in ('cycle', 'missing-dependency', 'citation', 'task-field'):
         task = json.loads(data['choices'][0]['message']['content'])['tasks'][0]
         if kind == 'cycle': task['prerequisites'] = ['second']; tasks = [task, dict(task, id='second', prerequisites=['review'])]
-        else: task['sources'] = ['https://invented.example.com']; tasks = [task]
+        else:
+            if kind == 'missing-dependency': task['prerequisites'] = ['missing']
+            if kind == 'citation': task['sources'] = ['https://invented.example.com']
+            if kind == 'task-field': task['unexpected'] = True
+            tasks = [task]
         data['choices'][0]['message']['content'] = json.dumps({'schema_version': 1, 'tasks': tasks})
+    if kind == 'schema': data['choices'][0]['message']['content'] = '{"schema_version":true,"tasks":[]}'
+    if kind == 'non-finite-plan': data['choices'][0]['message']['content'] = '{"schema_version":NaN,"tasks":[]}'
     if kind == 'non-json-plan': data['choices'][0]['message']['content'] = '```json\n{}\n```'
     raw = json.dumps(data).encode()
     if kind == 'duplicate': raw = raw.replace(b'"index": 0', b'"index": 0, "index": 0')
     if kind == 'oversized': raw = b'x' * (paid.RESPONSE_BYTES + 1)
     if kind == 'non-finite': raw = raw.replace(b'"created": 1', b'"created": NaN')
     with pytest.raises((cencori.CencoriError, PlanError)): paid.parse_completion(raw, {URL})
+
+
+@pytest.mark.parametrize('scanned', [False, True])
+def test_safety_metadata_does_not_change_validated_plan(scanned):
+    data = response()
+    expected = paid.parse_completion(json.dumps(data).encode(), {URL})
+    data['safety'] = {'scanned': scanned}
+    assert paid.parse_completion(json.dumps(data).encode(), {URL}) == expected
+
+
+@pytest.mark.parametrize('safety', [
+    None, False, True, 0, 1, 'false', [], {},
+    {'scanned': None}, {'scanned': 0}, {'scanned': 1}, {'scanned': 0.0},
+    {'scanned': 1.0}, {'scanned': 'false'}, {'scanned': 'true'},
+    {'scanned': []}, {'scanned': {}}, {'scanned': float('nan')},
+    {'safe': True}, {'scanned': False, 'unexpected': True},
+    {'scanned': True, 'input': {'safe': True}},
+])
+def test_malformed_or_unsupported_safety_metadata(safety):
+    data = response()
+    data['safety'] = safety
+    with pytest.raises(cencori.CencoriError):
+        paid.parse_completion(json.dumps(data).encode(), {URL})
+
+
+@pytest.mark.parametrize('fields', [
+    b'"safety":{"scanned":false,"scanned":true}',
+    b'"safety":{"scanned":false},"safety":{"scanned":true}',
+])
+def test_duplicate_safety_fields_are_rejected(fields):
+    raw = b'{' + fields + b',' + json.dumps(response()).encode()[1:]
+    with pytest.raises(cencori.CencoriError, match='duplicate-key JSON'):
+        paid.parse_completion(raw, {URL})
+
+
+@pytest.mark.parametrize('scanned', [None, False, True])
+@pytest.mark.parametrize('truncated_plan', [False, True])
+def test_length_completion_is_invalid_and_never_repaid(prepared, buy, tmp_path, scanned, truncated_plan):
+    # Synthetic reproduction; even a complete JSON plan cannot override length.
+    data = response()
+    data['choices'][0]['finish_reason'] = 'length'
+    data['usage'] = {'prompt_tokens': 100, 'completion_tokens': 1024, 'total_tokens': 1124}
+    if scanned is not None:
+        data['safety'] = {'scanned': scanned}
+    if truncated_plan:
+        data['choices'][0]['message']['content'] = data['choices'][0]['message']['content'][:-1]
+    raw = json.dumps(data).encode()
+    with pytest.raises(cencori.CencoriError, match='Incomplete'):
+        paid.parse_completion(raw, {URL})
+    directory = tmp_path / 'attempt'
+    with patch('honeyguider.paid.run_attempt', wraps=paid.run_attempt) as attempt:
+        with pytest.raises(cencori.CencoriError, match='Do not retry automatically'):
+            execute(prepared, buy, directory, raw=raw)
+    attempt.assert_called_once()
+    assert (directory / 'stdout.bin').read_bytes() == raw
+    assert json.loads((directory / 'validation.json').read_bytes()) == {'valid': False, 'automatic_retry': False}
+    outcome = json.loads((directory / 'outcome.json').read_bytes())
+    assert outcome['returncode'] == 0
+    assert outcome['claimed_transaction_hash'] == '0x' + 'a' * 64
+    assert outcome['settlement'] == 'unknown' and outcome['automatic_retry'] is False
 
 
 @pytest.mark.parametrize('raw,code,error', [
@@ -309,9 +386,12 @@ def test_cli_labels_ai_plan_and_shows_only_next_action(prepared, buy, tmp_path):
     assert 'Next action: review' in result.output
 
 
+@pytest.mark.parametrize('scanned', [None, False, True])
 @pytest.mark.parametrize('field,value', [('id', []), ('created', True), ('usage', []), ('system_fingerprint', 1), ('service_tier', {})])
-def test_invalid_completion_metadata(field, value):
+def test_invalid_completion_metadata(field, value, scanned):
     data = response()
+    if scanned is not None:
+        data['safety'] = {'scanned': scanned}
     data[field] = value
     with pytest.raises(cencori.CencoriError):
         paid.parse_completion(json.dumps(data).encode(), {URL})
@@ -331,8 +411,11 @@ def test_quote_failure_does_not_pay(prepared, buy, tmp_path):
     popen.assert_not_called()
 
 
-def test_paid_plan_duplicate_keys_are_rejected():
+@pytest.mark.parametrize('scanned', [None, False, True])
+def test_paid_plan_duplicate_keys_are_rejected(scanned):
     data = response()
+    if scanned is not None:
+        data['safety'] = {'scanned': scanned}
     data['choices'][0]['message']['content'] = '{"schema_version":1,"schema_version":1,"tasks":[]}'
     with pytest.raises(cencori.CencoriError):
         paid.parse_completion(json.dumps(data).encode(), {URL})

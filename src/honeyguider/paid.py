@@ -194,9 +194,15 @@ def parse_completion(raw, sources):
     if not raw or len(raw) > RESPONSE_BYTES:
         raise cencori.CencoriError('Completion envelope exceeds response limit or is empty')
     response = strict_json(raw)
-    allowed = {'id', 'object', 'created', 'model', 'choices', 'usage', 'system_fingerprint', 'service_tier'}
+    allowed = {'id', 'object', 'created', 'model', 'choices', 'usage', 'system_fingerprint', 'service_tier', 'safety'}
     if not isinstance(response, dict) or set(response) - allowed:
         raise cencori.CencoriError('Unsupported completion envelope')
+    if 'safety' in response:
+        safety = response['safety']
+        if (not isinstance(safety, dict) or set(safety) != {'scanned'}
+                or type(safety['scanned']) is not bool):
+            raise cencori.CencoriError('Invalid or unsupported completion safety metadata')
+        # Cencori's scan status is metadata, never proof of safety or validity.
     for field in ('id', 'system_fingerprint', 'service_tier'):
         if field in response and response[field] is not None and (not isinstance(response[field], str) or len(response[field]) > 200):
             raise cencori.CencoriError('Invalid completion metadata')
