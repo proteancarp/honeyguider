@@ -5,9 +5,19 @@
   "services": [
     {
       "name": "web",
+      "endpoint": "https://honeyguider.streamlit.app/"
+    },
+    {
+      "name": "repository",
       "endpoint": "https://github.com/proteancarp/honeyguider"
     }
   ],
   "x402Support": false,
-  "active": true
+  "active": true,
+  "registrations": [
+    {
+      "agentId": 10015,
+      "agentRegistry": "eip155:42220:0x8004a169fb4a3325136eb29fa0ceb6d2e539a432"
+    }
+  ]
 }
