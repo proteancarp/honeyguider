@@ -1,0 +1,28 @@
+[server]
+headless = true
+enableXsrfProtection = true
+enableCORS = true
+
+[client]
+showErrorDetails = "none"
+toolbarMode = "viewer"
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#9A5B00"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F5F0"
+textColor = "#203B32"
+borderColor = "#DADFD7"
+greenColor = "#34654D"
+greenTextColor = "#203B32"
+greenBackgroundColor = "#E7EFE8"
+linkColor = "#9A5B00"
+font = "sans-serif"
+headingFont = "sans-serif"
+baseRadius = "0.5rem"
+buttonRadius = "0.4rem"
+showWidgetBorder = true
