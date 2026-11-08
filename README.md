@@ -1,19 +1,40 @@
 # Honeyguider
 
-A Python CLI that turns fragmented documentation and hackathon work into a
-clear next step. Honeyguider has completed a successful paid Cencori AI inference:
-local `attempt-005` produced nine validated, source-linked tasks for 0.01 USDC.
-The hosted browser showcase replays that recorded result; visitors cannot run
-paid inference or connect a wallet. New paid inference belongs to the separate
-local CLI workflow, where a person reviews the request and quote and explicitly
-approves one capped payment. Application validation and the user's independent
-Celoscan confirmation are distinct: local settlement status remains `unknown`.
+Honeyguider helps developers turn fragmented technical documentation into
+source-linked plans, dependency-aware next steps, and locally tracked progress.
+It is built for developers learning unfamiliar tools and building integrations.
 
-The browser also offers a deterministic playground. Use it or the CLI's offline
-practice plan without an account or wallet; the CLI can inspect local tools and
-track progress in local JSON.
+**[Open the hosted demonstration](https://honeyguider.streamlit.app/)** — the
+**Recorded AI Inference** tab replays a completed Cencori inference, paid
+through buy, on Celo mainnet: nine validated tasks, six required and three
+optional. No new
+inference or payment runs in the showcase. The separate **Deterministic
+playground** uses an authored scaffold, including when retrieving live docs.
 
-Open source under the [MIT licence](LICENSE).
+Requires Python 3.11+ and [pipx](https://github.com/pypa/pipx#install-pipx):
+
+```bash
+pipx install 'git+https://github.com/proteancarp/honeyguider.git'
+honeyguider explore --demo
+honeyguider next
+honeyguider status
+```
+
+Installation needs network access; these practice commands then work offline,
+without credentials or a wallet. This installs from GitHub; no PyPI release is
+claimed. `honeyguider check` inspects local tools and `honeyguider done TASK_ID`
+records completion when prerequisites pass.
+
+Default planning is deterministic. Optional paid AI planning uses a separate
+local CLI workflow with request review, a fresh quote, an exact spend cap and
+interactive approval for one attempt, with no automatic retries. Recorded
+`attempt-005` quoted and authorized 0.01 USDC. The operator confirmed its
+transaction on Celoscan; local settlement remains `unknown`.
+
+Read the [submission brief](docs/hackathon-submission.md),
+[public evidence and remaining gaps](docs/submission-evidence.md),
+[demo script](docs/demo-script.md), [CLI guide](docs/cli-usage.md), and
+[architecture](#architecture-and-scope). Open source under the [MIT licence](LICENSE).
 
 ## Isolated Streamlit browser demonstration
 
@@ -227,12 +248,13 @@ To start again, choose a new state file.
 
 ## Architecture and scope
 
-`src/honeyguider/cli.py` handles Typer commands and Rich output. `model.py` holds
-tasks and prerequisite selection, `demo.py` defines the deterministic Celo
-practice fixture, `checks.py` inspects local tools, and `state.py` validates and
+`src/honeyguider/cli.py` handles Typer commands and Rich output. `demo.py`
+defines the authored Celo practice scenario's offline tasks, `model.py` provides
+task modelling with prerequisite blockers and next-task selection, `checks.py`
+inspects local tools, and `state.py` validates and
 persists versioned JSON. Tests mock tool execution and need no network or Node
-installation. HTTPX and BeautifulSoup are declared for future documentation
-retrieval in `research.py`; the offline demo does not use them.
+installation. HTTPX and BeautifulSoup power bounded documentation retrieval and extraction
+in `research.py`; the offline practice demo does not use network retrieval.
 
 The demo is an authored practice scenario inspired by the hackathon context,
 not an authoritative event checklist. Its documentation references are
@@ -314,8 +336,8 @@ without contacting the gateway:
   --request-file /tmp/honeyguider-cencori-prepare.json
 ```
 
-For an unpaid quote, supply an **already installed, trusted** `@celo/buy@0.8.4`
-executable. Replace the executable path below with its actual absolute path;
+For an unpaid quote, supply an already installed, explicitly selected
+`@celo/buy@0.8.4` executable. Replace the executable path below with its actual absolute path;
 honeyguider does not install packages, invoke npx, create wallets, inspect keys,
 or fund accounts. Each invocation requires a new output filename:
 
@@ -323,7 +345,7 @@ or fund accounts. Each invocation requires a new output filename:
 .venv/bin/honeyguider plan https://docs.celo.org/build/agents/8004 \
   --goal "Register an ERC-8004 agent on Celo" \
   --quote-only --max-tokens 1024 \
-  --buy-executable /absolute/path/to/trusted/buy \
+  --buy-executable /absolute/path/to/buy \
   --request-file /tmp/honeyguider-cencori-quote.json
 .venv/bin/python -m json.tool /tmp/honeyguider-cencori-quote.json
 sha256sum /tmp/honeyguider-cencori-quote.json
@@ -337,10 +359,12 @@ using `quote -X POST -H 'content-type: application/json' --data BODY` and the
 fixed endpoint `https://gateway.usebuy.ai/cencori/v1/chat/completions`. `BODY` is
 the **exact saved body**, passed as one argument, not a placeholder prompt or
 shell command. Only these two fixed buy operations are available. Version and
-quote timeouts are five and thirty seconds, with no retry. Executable identity
-is trusted by your explicit path selection, not proven by its version string;
-use a trusted installation and PATH for its runtime. Credentials, wallet
-variables, and Node options from the parent environment are not forwarded.
+quote timeouts are five and thirty seconds, with no retry. The executable is
+selected through an explicit operator-supplied path. Its reported version
+identifies itself but does not independently establish its authenticity or
+integrity; use a trusted installation and PATH for its runtime. Credentials,
+wallet variables, and Node options from the parent environment are not
+forwarded.
 
 The request builder uses only `model`, `max_tokens`, and `messages`, targeting
 `maximo-atlas-1.3`. Output budgets are restricted to 256, 1024 or 4096 tokens.
@@ -508,8 +532,8 @@ payments; the separately captured live attempt is described below.
 ```
 
 The buy path above was inspected locally: `--version`, `--help` and
-`curl --help` reported **0.8.4**. Choose your own trusted absolute executable
-path on another machine. `infer` requires a new receipt directory whose parent
+`curl --help` reported **0.8.4**. Choose your own explicitly selected absolute
+executable path on another machine. `infer` requires a new receipt directory whose parent
 already exists (for example, create `receipts/` manually). It never reuses or
 resumes an attempt directory, and refuses unattended stdin/stdout. There is no
 `--yes`, approval environment variable, automatic spend cap, or payment retry.
