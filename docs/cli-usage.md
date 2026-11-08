@@ -46,25 +46,51 @@ choice; press Enter or choose `0` to exit or go back. Ctrl-C or end of input
 cancels navigation successfully. Opening the menu does not retrieve documents,
 inspect installed tools, or create progress files.
 
-- **Explore the deterministic offline demo** initializes or preserves the Celo
-  practice fixture. It shows the next actionable task and its action first.
-  Choose full details for citations, progress for blockers, or demo command help.
-- **Research documentation / prepare a development plan** asks for a public
-  HTTPS documentation URL and goal. Retrieval happens only after you answer yes
-  to the network prompt (default: no). Research displays excerpts; planning
-  creates an in-memory deterministic demonstration scaffold with source
-  references. It does not infer verified requirements or save a tracked plan.
-- **Resume a local plan / view progress** opens either the selected demo state
-  or a previously imported tracking directory. Tracked plans show the next task,
-  progress, full citations, and all task details without accessing the original
-  receipt or making network requests. Private tracking validation still applies.
-- **Command help** lists all commands, including capabilities outside the menu.
-  Use `honeyguider COMMAND --help` for command-specific arguments.
+- **Explore documentation** asks for a public HTTPS URL and development goal.
+  Choose relevant excerpts or a fixed demonstration plan. Retrieval requires
+  explicit network confirmation (default: no). Demonstration plans are not
+  AI-inferred requirements and are not saved for tracking.
+- **Continue a saved plan** opens the sample or a previously imported AI plan.
+  Imported plans remain unverified recommendations; private tracking validation
+  and append-only revisions apply. You enter the tracking directory yourself.
+- **Try a sample walkthrough** starts or resumes fixed offline Celo practice data.
+  It shows a compact current step and progress count. No source is fetched.
+- **Help and advanced commands** explains the workflow and lists CLI commands.
+- **Exit** leaves saved progress available for the next visit.
 
-Task completion and environment checks remain explicit commands. The menu does
-not execute suggested actions. Documentation and AI recommendations remain
-untrusted; citations establish source presence, not correctness. The menu has no
-payment or wallet actions.
+For a ready, unfinished step, choose **1** to mark it complete, then explicitly
+confirm self-reported completion (default: no). Existing completion handlers
+validate prerequisites and save progress; the next actionable step appears
+immediately. If no step is actionable, the next pending step shows its blockers.
+Choose **2** for instructions and sources, **3** for the complete roadmap,
+progress and blockers, **4** to inspect a step by its roadmap ID, or **0** to
+return to the main menu. Blocked or completed steps have no completion action;
+the menu explains prerequisites, required tool checks, or existing completion.
+Instructions and roadmap inspection remain available. Completion applies to the
+inspected step when it is ready and unfinished. After a
+successful completion, navigation returns to the next available step.
+
+For the sample, **5** offers local tool version checks, with a separate explicit
+confirmation. These checks save a snapshot and never install tools. The workspace
+step remains blocked until the required tools have successful saved checks.
+Read-only views, invalid choices and refused confirmations do not repeat the
+entire task and action list. The numbered actions remain available in scrollback.
+
+If a completion attempt fails, saved progress may already have changed. The
+menu re-reads validated saved state when possible and reports what is currently
+visible; this does not establish storage durability after a late failure. Writes
+are never automatically retried. If progress cannot be verified, navigation
+stops so you can inspect the saved plan before attempting another completion.
+
+Offline sample links are references that have not been fetched. Imported AI-plan
+links are citations to the evidence retrieved for the original plan. Opening an
+imported plan does not re-fetch those sources.
+
+You do not need standalone commands to complete the walkthrough. Suggested task
+work is performed manually outside Honeyguider; completion records your report,
+not verified execution. Source references establish citation presence, not
+correctness. Recorded examples are saved outputs, not live inference. The guided
+menu has no paid inference, payment, transaction or wallet actions.
 
 ## Offline demo commands
 
@@ -121,7 +147,9 @@ invocation requires both stdin and stdout to be terminals to open the menu;
 otherwise it prints help and exits with code 2 without reading input or changing
 state. `honeyguider --help` always exits successfully without opening the menu.
 
-Menu exit and cancellation return 0. Command failures retain their existing
-codes, including when selected through navigation, and end the menu session.
+Menu exit and cancellation return 0. Explicit command failures retain their
+existing codes. Inside the menu, rejected completion, unavailable tools and
+retrieval issues show feedback and allow navigation to continue. Invalid saved
+state and storage boundary errors stop navigation without resetting progress.
 Invalid menu choices reprompt without performing an action. Existing command
 arguments, detailed output, state formats, and entry points remain available.
