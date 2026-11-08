@@ -50,12 +50,19 @@ inspect installed tools, or create progress files.
   Choose relevant excerpts or a fixed demonstration plan. Retrieval requires
   explicit network confirmation (default: no). Demonstration plans are not
   AI-inferred requirements and are not saved for tracking.
-- **Continue a saved plan** opens the sample or a previously imported AI plan.
-  Imported plans remain unverified recommendations; private tracking validation
-  and append-only revisions apply. You enter the tracking directory yourself.
+- **Continue a saved plan** offers the sample walkthrough, a previously imported
+  AI plan, or a list of existing tracked plans (**3**). Imported plans remain
+  unverified recommendations; private tracking validation and append-only
+  revisions apply.
 - **Try a sample walkthrough** starts or resumes fixed offline Celo practice data.
   It shows a compact current step and progress count. No source is fetched.
 - **Help and advanced commands** explains the workflow and lists CLI commands.
+- **Wallet & payments** opens read-only wallet and payment views plus a
+  proposal-only setup. It never holds keys and never confirms settlement;
+  reconciliation is the only action that explicitly asks buy for on-chain
+  status (default: no).
+- **Create a tracked plan** runs the guided paid journey: research, one approved
+  paid attempt, idempotent import and a local tracking session.
 - **Exit** leaves saved progress available for the next visit.
 
 For a ready, unfinished step, choose **1** to mark it complete, then explicitly
@@ -89,8 +96,89 @@ imported plan does not re-fetch those sources.
 You do not need standalone commands to complete the walkthrough. Suggested task
 work is performed manually outside Honeyguider; completion records your report,
 not verified execution. Source references establish citation presence, not
-correctness. Recorded examples are saved outputs, not live inference. The guided
-menu has no paid inference, payment, transaction or wallet actions.
+correctness. Recorded examples are saved outputs, not live inference. Paid
+inference and wallet actions live only under **5 Wallet & payments** and
+**6 Create a tracked plan**, both of which state their own limits.
+
+## Guided journey (Phase 6)
+
+The main menu composes the existing boundaries rather than replacing them:
+
+| Menu | Action | Network or payment |
+| --- | --- | --- |
+| **5** | Wallet & payments | Read-only by default; reconciliation asks separately |
+| **6** | Create a tracked plan | Retrieval consent and one separately approved paid attempt |
+| **2 → 3** | List existing tracked plans | None; reads local tracking directories |
+
+Every menu entry begins with the same rule: opening the menu stays offline, the
+sample is fixed practice data, imported plans are unverified AI recommendations,
+and recorded examples are saved outputs rather than live inference.
+
+### Wallet & payments (**5**)
+
+Sub-options are **1** identity and readiness, **2** balances, **3** funding
+instructions, **4** payment history, **5** reconciliation and **6** setup.
+
+- Identity/readiness separates a genuinely zero supported balance from balances
+  that could not be read; missing information is never reported as zero. Sepolia
+  identities are routed to Celo Mainnet, which the paid journey requires.
+- Funding instructions list the receiving address and supported tokens (USDC,
+  USDT, USAT), note that the gateway sponsors transaction gas so no separate CELO
+  gas balance is needed, and separate funding a wallet from approving a paid call.
+- Payment history shows locally recorded claims from the buy receipt ledger, not
+  settlement proof. Recorded transaction hashes are unverified correlation only.
+- Reconciliation asks for its own network consent (default: no), then offers an
+  optional receipt-directory correlation. A single match is correlation evidence
+  only, never provider authentication of settlement; the menu repeats that an
+  imported record does not prove a provider payment settled.
+- Setup is a proposal only. The menu prints `buy setup --name <alias>` for you to
+  run in your own terminal, then asks you to choose **1** to verify readiness. It
+  never executes setup, never reads or stores key material, and never creates the
+  account for you.
+
+### Create a tracked plan (**6**)
+
+The guided paid journey runs in this order:
+
+1. Enter the documentation URL and development goal; retrieval needs a separate
+   network consent (default: no). Declining creates nothing.
+2. `journey.prepare` builds and exclusively preserves the exact request under
+   `.honeyguider/requests`. Preparation is free.
+3. A readiness gate checks the named buy account and Celo Mainnet identity. If the
+   wallet is unreadable, not mainnet, or otherwise unsuitable, the flow returns
+   without charging and keeps the prepared request for later.
+4. After an explicit proceed confirmation, choose a payment token (default USDC,
+   validated against USDC/USDT/USAT) and a new receipt directory under
+   `.honeyguider/receipts`.
+5. `journey.infer_with_receipt` runs the paid attempt under the content-keyed
+   lock, with the named account and expected payer: a fresh quote, an
+   exact-match spend cap, a session approval code, and one attempt with no
+   automatic retry.
+6. `journey.import_outcome` imports the validated outcome idempotently. A custom
+   tracking root requires explicit consent (default: no). A previously imported
+   record is recognized rather than duplicated.
+7. The tracking session opens with the statement that the plan is validated for
+   inference output but **payment settlement remains UNKNOWN**, and that an
+   imported record does not prove a provider payment settled.
+
+If the paid attempt cannot start (for example, advisory locking is unavailable on
+this platform), the request is preserved and nothing is charged. If a paid call is
+refused or fails, the menu states that settlement is UNKNOWN and never confirms
+it. Payment may settle even when response validation fails; a new attempt always
+needs fresh review.
+
+### Resuming tracked plans (**2 → 3**)
+
+**2 Continue a saved plan**, then **3 List existing tracked plans**, shows each
+local tracking directory with completed/task counts and its recorded attempt or
+settlement label. Settlement is reported as `unknown`; an unreadable or missing
+receipt also adds a bounded problem row. Selecting a listed number opens that
+plan; a path can be entered instead. Listing creates nothing, follows no
+symlinks, and never promotes settlement to confirmed.
+
+See [demo-script.md](demo-script.md) for the presenter flow and
+[guided-workflow-review.md](guided-workflow-review.md) for the implementation
+record.
 
 ## Offline demo commands
 

@@ -18,6 +18,19 @@ were opened or copied.
 | Cencori / buy integration | [Cencori adapter](https://github.com/proteancarp/honeyguider/blob/main/src/honeyguider/cencori.py), [paid boundary](https://github.com/proteancarp/honeyguider/blob/main/src/honeyguider/paid.py), [official buy gateway guide](https://github.com/celo-org/buy-skill/blob/main/skills/use-api-gateway/SKILL.md) | Fixed Cencori endpoint, tested buy 0.8.4 interface, exact-body quotes and explicitly capped interactive payment in source. Does not establish compatibility with newer buy releases. |
 | Automated tests | [tests directory](https://github.com/proteancarp/honeyguider/tree/main/tests), [project configuration](https://github.com/proteancarp/honeyguider/blob/main/pyproject.toml), [CI workflows](https://github.com/proteancarp/honeyguider/tree/main/.github/workflows) | pytest covers research safety, plan validation, offline CLI/state, quotes/payment safeguards, tracking and recorded/browser isolation. Tests use fixtures/mocks; no live inference, settlement or adoption is established by them. UI tests may skip without Streamlit. |
 
+### Phase 4-6 product boundaries (implemented)
+
+| Boundary | What is implemented | What it does not establish |
+| --- | --- | --- |
+| Execution lock and account binding | `journey.acquire_attempt_lock` holds a content-keyed advisory lock for one paid attempt; the guided flow passes the named account and expected payer. | The lock is advisory and single-host; it does not coordinate other machines or replace account-level payment controls. |
+| Attempt-state classification | `journey.attempt_state` classifies S0–S4 from bounded local artifacts: pre-approval, approval-not-launched, launched-outcome-unavailable, outcome-recorded-unconfirmed, and a caller-asserted provider-confirmed state. Ambiguous evidence is `blocked`. | Local artifacts cannot prove settlement. UNKNOWN is the default, and `claim_confirmed_by_provider` is a caller-supplied assertion that the product never sets. |
+| Idempotent import | `journey.import_outcome` fingerprints a validation-valid outcome and imports it once, recognizing a previously imported record; a custom tracking root needs explicit consent. | Import proves local artifact consistency and plan validity, not settlement, authorship or chain state. |
+| Transaction correlation | `journey.correlate_claim` compares a recorded header hash with a locally recorded payment row. | A single match is correlation evidence only; it is never provider authentication of settlement. |
+| Platform claim | The paid journey is Linux-verified and POSIX-only where advisory locking is required. | macOS is unverified; native Windows locking is not implemented; the CLI reports a clear error where locking is unavailable. |
+
+The presenter flow is documented in [demo-script.md](demo-script.md). The Phase 6
+menu wiring is recorded in [guided-workflow-review.md](guided-workflow-review.md).
+
 ## Official requirements review
 
 Source: [official Loops House event page](https://www.loops.house/agents-on-open-rails),
@@ -78,8 +91,9 @@ These are preparation recommendations, not additional confirmed event rules:
   portal; this review covered the public event page, not a submitted form.
 - Publish the submission documentation after independent review. The sanitized
   showcase is already on main; check the deployed revision separately.
-- Complete independent CLI usability review before showcasing the redesign.
-  The existing CLI can demonstrate offline practice in the meantime.
+- Complete independent CLI usability review before presenting the guided menu as
+  validated by outside users. Offline practice and the prepared rehearsal
+  controls can demonstrate the current CLI in the meantime.
 - Attach the actual local test outcome to the review; separately inspect public
   CI status. Neither implies live service or blockchain verification.
 
@@ -99,3 +113,12 @@ and `git diff --check` were checked again.
 The added material was reviewed for private data: it uses the existing sanitized
 recording and public metadata only. No implementation or private receipt changes
 are included.
+
+## Final Phase 6 verification record
+
+The completed Phase 6 suite was recorded as `.venv/bin/python -m pytest -q` —
+**819 passed**, with no failures or skips. Per-file counts: journey 146, welcome
+81, paid 234, wallet 75, tracking 56, plus the MVP, Cencori, planning, recorded
+and research suites. These are offline tests with fixtures and doubles; they do
+not establish live inference, settlement or adoption. This documentation revision
+did not rerun the suite; the 2026-11-01 result above remains historical evidence.

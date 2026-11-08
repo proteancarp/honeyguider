@@ -15,19 +15,63 @@ Requires Python 3.11+ and [pipx](https://github.com/pypa/pipx#install-pipx):
 
 ```bash
 pipx install 'git+https://github.com/proteancarp/honeyguider.git'
-honeyguider explore --demo
-honeyguider next
-honeyguider status
+honeyguider
 ```
 
-Installation needs network access; these practice commands then work offline,
-without credentials or a wallet. This installs from GitHub; no PyPI release is
-claimed. `honeyguider check` inspects local tools and `honeyguider done TASK_ID`
-records completion when prerequisites pass.
+Or with [uv](https://docs.astral.sh/uv/):
 
-Default planning is deterministic. Optional paid AI planning uses a separate
-local CLI workflow with request review, a fresh quote, an exact spend cap and
-interactive approval for one attempt, with no automatic retries. Recorded
+```bash
+uv tool install 'git+https://github.com/proteancarp/honeyguider.git'
+honeyguider
+```
+
+Installation needs network access; the guided menu then works offline until you
+explicitly opt into retrieval, a paid call, or a wallet view. This installs from
+GitHub; no PyPI release is claimed.
+
+Run `honeyguider` with no arguments in an interactive terminal to open the guided
+menu:
+
+- **1 Explore documentation** — retrieve public HTTPS evidence and read relevant
+  excerpts or a fixed demonstration plan; not saved for tracking.
+- **2 Continue a saved plan** — resume the sample, open a previously imported AI
+  plan, or list existing tracked plans (**3**).
+- **3 Try a sample walkthrough** — the fixed offline Celo practice plan.
+- **4 Help and advanced commands** — workflow explanation and the Typer commands.
+- **5 Wallet & payments** — read-only identity and readiness (Celo Mainnet,
+  with zero-balance and unavailable-balance wording kept distinct), balance
+  refresh, funding instructions, local payment history, opt-in reconciliation,
+  and a proposal-only wallet setup. Setup prints `buy setup --name <alias>` for
+  you to run in your own terminal; the menu never executes it and never sees keys.
+- **6 Create a tracked plan** — the guided paid journey described below.
+- **0 Exit**
+
+The guided paid journey retrieves documentation only after a separate network
+consent, preserves the exact request under `.honeyguider/requests`, and runs a
+readiness gate that returns without charging when the wallet or platform is
+unsuitable. It then shows a fresh quote, requires an exact cap and a session
+approval code, runs one locked attempt with no automatic retries, and imports the
+validated outcome idempotently into a tracking session. The session states
+explicitly that settlement remains UNKNOWN and that an imported record does not
+prove a provider payment settled. See [docs/cli-usage.md](docs/cli-usage.md) for
+the full walkthrough and [docs/demo-script.md](docs/demo-script.md) for the demo.
+
+The deterministic offline practice commands still work directly:
+`honeyguider explore --demo`, `next`, `done TASK_ID`, `check`, and `status`.
+`check` inspects local tools and `done` records completion when prerequisites
+pass.
+
+The paid journey needs a trusted, already-installed `buy` 0.8.4 CLI on a POSIX
+host and an operator-funded Celo Mainnet wallet holding a supported stablecoin
+(USDC, USDT or USAT). Linux is verified; macOS is unverified; native Windows
+locking is not implemented. The paid journey requires a POSIX platform, and the
+CLI reports a clear error where advisory locking is unavailable.
+
+Default planning is deterministic. New paid AI planning runs through the guided
+**6 Create a tracked plan** flow, which withholds the paid step until you review
+the preserved request and accept a fresh quote with an exact cap and session
+approval code. The advanced `infer` command remains available for reviewed,
+independently authorized attempts; neither path retries automatically. Recorded
 `attempt-005` quoted and authorized 0.01 USDC. The operator confirmed its
 transaction on Celoscan; local settlement remains `unknown`.
 
@@ -149,6 +193,10 @@ with no horizontal page overflow. Verify keyboard focus and the expanded editor.
 - Retrieve source-linked excerpts from public HTTPS documentation
 - Generate deterministic dependency-aware planning scaffolds
 - Recommend the next actionable step and track demo progress across sessions
+- Open a guided menu that composes research, one explicitly approved paid
+  attempt, idempotent import and local tracking
+- Inspect wallet identity and readiness, and import an existing successful
+  receipt offline
 
 ## Quick start (offline)
 
@@ -171,18 +219,21 @@ tool versions and the next task is `workspace` if all checks pass. Missing Git,
 Node.js or npm makes `check` exit 1 and blocks `workspace`; install missing tools
 yourself and rerun `check`. `status` explains blockers. Completion is self-reported.
 
-**Development status:** this is an early MVP. The demo is an authored practice
-scenario, not verified hackathon rules. Research uses keyword matching and
-planning scaffolds are deterministic; Honeyguider does not implement tasks.
-Live research requires network access. Installation and offline tests require
-no API credentials, blockchain funds or wallet access.
+**Development status:** the guided menu, offline practice, deterministic planning,
+the paid journey and local tracking are implemented. The demo is an authored
+practice scenario, not verified hackathon rules. Research uses keyword matching
+and deterministic scaffolds; Honeyguider does not implement tasks. Live research
+requires network access. Installation and offline tests require no API
+credentials, blockchain funds or wallet access.
 
-**Live-payment limitation:** the separate `infer` command is experimental, can
-spend real funds, and requires explicit interactive approval. The first captured
-paid Cencori inference returned an incomplete completion and was rejected; its
-Celo transaction was reported successful. Offline tests do not verify live
-inference or settlement. Do not run `infer` to verify installation; review the
-detailed limitations below before considering any live use.
+**Live-payment limitation:** guided **6 Create a tracked plan** and the advanced
+`infer` command can spend real funds and require explicit interactive approval.
+The first captured paid Cencori inference returned an incomplete completion and
+was rejected; its Celo transaction was reported successful. The paid journey
+requires a POSIX host (Linux verified; macOS unverified; no native Windows
+locking) and reports a clear error where advisory locking is unavailable. Offline
+tests do not verify live inference or settlement. Do not pay merely to verify
+installation; review the detailed limitations below before any live use.
 
 Keep private prepared requests in `requests/`, receipts in `receipts/`, and
 custom state in `.honeyguider/` (or use the default `.pathf1ndar/`). These locations
@@ -263,8 +314,9 @@ not an authoritative event checklist. Its documentation references are
 verified by this program. Eligibility, deadlines, SDK details and actual
 submission rules must be checked against current official event materials.
 Automatic implementation remains outside this MVP. Paid AI planning is available
-only through the explicitly approved `infer` workflow below. An existing successful
-receipt can be imported for offline progress tracking with `track`.
+through the guided **6 Create a tracked plan** flow or the explicitly approved
+`infer` command below. An existing successful receipt can be imported for offline
+progress tracking with `track`.
 
 ## Dependency planning (Phase 3A)
 
@@ -805,7 +857,9 @@ The user independently confirmed it on Celoscan. Honeyguider's local settlement
 record remains **unknown**. Successful application-level validation establishes
 request/completion structure, citation membership and graph validity; it does not
 verify on-chain settlement, task correctness or whether citations entail each claim.
-The browser performs no blockchain verification.
+The browser performs no blockchain verification. This is a replay of recorded
+evidence; a new guided attempt would run only through **6 Create a tracked plan**
+on an operator-authorized host and would not change the pinned recording.
 
 The shipped `src/honeyguider/recorded_inference.json` contains the actual nine
 tasks extracted from the private receipt, never a copied response envelope.
