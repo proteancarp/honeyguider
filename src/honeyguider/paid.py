@@ -15,6 +15,7 @@ import sys
 import time
 
 from . import cencori
+from . import wallet
 from .planning import PlanError, _object, _text, validate_plan
 from .research import CODE_CHARS, MAX_BLOCKS, MAX_EXCERPTS, TEXT_CHARS, safe_url
 
@@ -189,6 +190,58 @@ def offers(raw, token):
 
 def interactive():
     return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _require_binding(account, expected_payer):
+    """Subprocess-free pre-flight: reject unsafe or partial binding immediately.
+
+    Runs before any request load, version probe, receipt directory or process.
+    Account names reuse Phase 1's validator (single source of truth for the
+    unsafe-name rules); the payer format is strict 40-hex so no argument can
+    ever be smuggled into the buy argv.
+    """
+    if account is None and expected_payer is None:
+        return
+    if account is None or expected_payer is None:
+        raise cencori.CencoriError('Account binding requires both account and expected payer address')
+    if not isinstance(account, str):
+        # Non-string account names cannot be forwarded to the buy argv; reject
+        # before wallet validation (which would raise AttributeError).
+        raise cencori.CencoriError('Account binding requires both account and expected payer address')
+    if not isinstance(expected_payer, str) or re.fullmatch(r'0x[0-9a-fA-F]{40}', expected_payer) is None:
+        raise cencori.CencoriError('Malformed expected payer address; no payment attempted')
+    try:
+        wallet._validated_account(account)
+    except wallet.WalletError as exc:
+        raise cencori.CencoriError(str(exc)) from exc
+
+
+def _bound_payer(buy, account, expected_payer):
+    """Verify a pre-flighted binding against one confirmed mainnet payer.
+
+    Both ``account`` and ``expected_payer`` absent keeps the legacy behaviour
+    exactly: no subprocess, no display. Verification reuses Phase 1's strict
+    whoami parser (single source of truth); verdicts come from parsed shape,
+    never from a return code. Static validation lives in ``_require_binding``;
+    the same both-or-neither guard here keeps a direct call fail-closed.
+    """
+    if account is None and expected_payer is None:
+        return ''
+    if account is None or expected_payer is None:
+        raise cencori.CencoriError('Account binding requires both account and expected payer address')
+    try:
+        observed = wallet.identity(
+            buy, account,
+            runner=lambda arguments: subprocess.run(
+                arguments, capture_output=True, timeout=15,
+                stdin=subprocess.DEVNULL, env=wallet_environment()))
+    except wallet.WalletError as exc:
+        raise cencori.CencoriError(str(exc)) from exc
+    if observed.network != 'celo':
+        raise cencori.CencoriError('Payer account is not a confirmed Celo Mainnet account; no payment attempted')
+    if observed.address.lower() != expected_payer.lower():
+        raise cencori.CencoriError('Payer account changed between readiness and approval; no payment attempted')
+    return observed.address
 
 
 def parse_completion(raw, sources):
@@ -388,10 +441,11 @@ def run_attempt(arguments, directory, approval):
         raise cencori.CencoriError('Paid attempt failed or was interrupted; settlement is UNKNOWN. Raw evidence preserved. Never retry automatically.')
 
 
-def infer(request_file, executable, receipt_dir, token, prompt, display):
+def infer(request_file, executable, receipt_dir, token, prompt, display, *, account=None, expected_payer=None):
     """Interactive boundary; prompts occur only after an exact-body fresh quote."""
     if not interactive():
         raise cencori.CencoriError('Paid inference requires active interactive stdin and stdout; no unattended approval is supported')
+    _require_binding(account, expected_payer)
     if token not in TOKENS:
         raise cencori.CencoriError('Unsupported payment token')
     saved = load_request(request_file)
@@ -409,7 +463,7 @@ def infer(request_file, executable, receipt_dir, token, prompt, display):
     with private_file(receipt_dir / 'headers.bin') as headers:
         sync_file(headers)
     sync_directory(receipt_dir)
-    quote_args = [buy, '--json', 'quote', '--token', token, '-X', 'POST', '-H', 'content-type: application/json',
+    quote_args = [buy, '--json', *(('--account', account) if account else ()), 'quote', '--token', token, '-X', 'POST', '-H', 'content-type: application/json',
                   '--data', saved.request.body.decode('utf-8'), cencori.ENDPOINT]
     quote_raw = capture_quote(quote_args, receipt_dir)
     selected = offers(quote_raw, token)
@@ -417,6 +471,9 @@ def infer(request_file, executable, receipt_dir, token, prompt, display):
     display(f'Fresh unpaid quote for SHA-256 {request_hash}; POST {cencori.ENDPOINT}')
     for offer in selected:
         display(f"Untrusted offer: {offer['price']} {token} on Celo; recipient {offer['pay_to']}")
+    confirmed = _bound_payer(buy, account, expected_payer)
+    if confirmed:
+        display(f'Paying from account: {account} ({confirmed}) on Celo Mainnet')
     cap = amount(prompt(f'Maximum spend in human-readable {token} units (from the quote)'))
     if not any(Decimal(offer['price']) == Decimal(cap) for offer in selected):
         raise cencori.CencoriError('Approved cap must match a freshly quoted selected-token offer exactly; no payment attempted')
@@ -436,7 +493,10 @@ def infer(request_file, executable, receipt_dir, token, prompt, display):
                 'buy_executable': buy, 'buy_version': '0.8.4',
                 'approved_at': datetime.now(timezone.utc).isoformat()}
     record(receipt_dir / 'approval.json', approval)
-    arguments = [buy, '--json', 'curl', '--max-amount', cap, '--token', token,
+    relaunched = _bound_payer(buy, account, confirmed or expected_payer)
+    if relaunched:
+        display(f'Paying from account: {account} ({relaunched}) on Celo Mainnet — re-verified before launch')
+    arguments = [buy, '--json', *(('--account', account) if account else ()), 'curl', '--max-amount', cap, '--token', token,
                  '-X', 'POST', '-H', 'content-type: application/json', '--data', saved.request.body.decode('utf-8'),
                  '--dump-header', str((receipt_dir / 'headers.bin').resolve()), cencori.ENDPOINT]
     run_attempt(arguments, receipt_dir, approval)

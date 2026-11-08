@@ -707,3 +707,277 @@ def test_postlaunch_filesystem_failure_keeps_unknown_intent_never_repays(prepare
     assert json.loads((directory / 'attempt.json').read_bytes())['settlement'] == 'unknown'
     assert (directory / 'stdout.bin').read_bytes() == json.dumps(response()).encode()
     assert not (directory / 'validation.json').exists()
+
+
+# --- Phase 2: paid-account binding (account + expected_payer) ---------------
+# All identity responses are fixed, verified-shape bytes; no real wallet,
+# buy binary, network or funds are ever touched.
+ACCOUNT = 'honeyguider'
+PAYER = '0xD1D1D1D1D1D1D1D1D1D1D1D1D1D1D1D1D1D1D1D1'
+
+
+def identity_output(address=PAYER, network='celo'):
+    assert len(address) == 42 and address.startswith('0x')
+    return f'buy on {network}\n  pays from {address}\n  balances 0.05 USDC, 0 USDT, 0 USAT, 0 USDm\n'.encode()
+
+
+IDENTITY_OUTPUT = identity_output()
+
+
+def run_bound(prepared, buy, directory, *, account=ACCOUNT, expected_payer=PAYER,
+              identity=IDENTITY_OUTPUT, identity_returncode=0,
+              prompts=('0.01', APPROVAL_CODE), quote_body=None, whoami_hook=None,
+              state=None):
+    """Drive paid.infer with injected account binding and an offline whoami fake."""
+    path, _ = prepared
+    messages, identity_calls, events = [], [], []
+    answers = iter(prompts)
+
+    def whoami(arguments, **kwargs):
+        index = len(identity_calls)
+        identity_calls.append(list(arguments))
+        events.append(('whoami', list(arguments)))
+        if whoami_hook is not None:
+            whoami_hook(index, list(arguments), directory)
+        if callable(identity):
+            value = identity(index, arguments)
+        elif isinstance(identity, (list, tuple)):
+            value = identity[index]
+        else:
+            value = identity
+        return subprocess.CompletedProcess(arguments, identity_returncode, value, b'')
+
+    def quoted(arguments, target):
+        events.append(('quote', list(arguments)))
+        return json.dumps(quote_body or quote()).encode()
+
+    def purchase(argv, **kwargs):
+        events.append(('purchase', list(argv)))
+        kwargs['stdout'].write(json.dumps(response()).encode())
+        kwargs['stderr'].write(b'')
+        return Process()
+
+    def ask(question):
+        events.append(('prompt', question))
+        return next(answers)
+
+    with patch('honeyguider.paid.interactive', return_value=True), \
+         patch('honeyguider.cencori._run', return_value=subprocess.CompletedProcess([], 0, b'0.8.4', b'')), \
+         patch('honeyguider.paid.capture_quote', side_effect=quoted) as quoting, \
+         patch('honeyguider.paid.subprocess.Popen', side_effect=purchase) as purchasing, \
+         patch('honeyguider.paid.subprocess.run', side_effect=whoami) as running, \
+         patch('honeyguider.paid.os.killpg'):
+        if state is not None:
+            state.update(quoting=quoting, purchasing=purchasing, running=running,
+                         messages=messages, identity_calls=identity_calls, events=events)
+        result = paid.infer(path, buy, directory, 'USDC', ask, messages.append,
+                            account=account, expected_payer=expected_payer)
+    return result, quoting, purchasing, running, messages, identity_calls, events
+
+
+def test_default_call_never_checks_identity_or_forwards_account(prepared, buy, tmp_path):
+    # Both kwargs absent: no whoami subprocess, no --account in either argv.
+    with patch('honeyguider.paid.subprocess.run',
+               side_effect=AssertionError('whoami must not run without binding')) as running:
+        plan, quoting, purchasing, _, _ = execute(prepared, buy, tmp_path / 'attempt')
+    assert plan.tasks
+    running.assert_not_called()
+    assert '--account' not in quoting.call_args.args[0]
+    assert '--account' not in purchasing.call_args.args[0]
+    assert quoting.call_args.args[0][1:5] == ['--json', 'quote', '--token', 'USDC']
+    assert purchasing.call_args.args[0][1:7] == ['--json', 'curl', '--max-amount', '0.01', '--token', 'USDC']
+
+
+@pytest.mark.parametrize('account,expected_payer', [(ACCOUNT, None), (None, PAYER)])
+def test_binding_requires_both_or_neither(prepared, buy, tmp_path, account, expected_payer):
+    directory = tmp_path / 'attempt'
+    with patch('honeyguider.paid.interactive', return_value=True), \
+         patch('honeyguider.cencori._run',
+               side_effect=AssertionError('version probe must not run')) as versioning, \
+         patch('honeyguider.paid.capture_quote',
+               side_effect=AssertionError('quote must not run')) as quoting, \
+         patch('honeyguider.paid.subprocess.run',
+               side_effect=AssertionError('whoami must not run for partial binding')) as running, \
+         patch('honeyguider.paid.subprocess.Popen') as popen:
+        with pytest.raises(cencori.CencoriError, match='requires both'):
+            paid.infer(prepared[0], buy, directory, 'USDC', lambda q: '0.01', print,
+                       account=account, expected_payer=expected_payer)
+    versioning.assert_not_called()
+    quoting.assert_not_called()
+    running.assert_not_called()
+    popen.assert_not_called()
+    assert not directory.exists()
+    assert not (directory / 'approval.json').exists()
+
+
+@pytest.mark.parametrize('bad', ['0x' + '1' * 39, '0x' + '1' * 41, '1' * 40, '0x' + 'g' * 40])
+def test_malformed_expected_payer_fails_before_subprocess(prepared, buy, tmp_path, bad):
+    directory = tmp_path / 'attempt'
+    with patch('honeyguider.paid.interactive', return_value=True), \
+         patch('honeyguider.cencori._run',
+               side_effect=AssertionError('version probe must not run')) as versioning, \
+         patch('honeyguider.paid.capture_quote',
+               side_effect=AssertionError('quote must not run')) as quoting, \
+         patch('honeyguider.paid.subprocess.run',
+               side_effect=AssertionError('whoami must not run for malformed payer')) as running, \
+         patch('honeyguider.paid.subprocess.Popen') as popen:
+        with pytest.raises(cencori.CencoriError, match='Malformed expected payer'):
+            paid.infer(prepared[0], buy, directory, 'USDC', lambda q: '0.01', print,
+                       account=ACCOUNT, expected_payer=bad)
+    versioning.assert_not_called()
+    quoting.assert_not_called()
+    running.assert_not_called()
+    popen.assert_not_called()
+    assert not directory.exists()
+    assert not (directory / 'approval.json').exists()
+
+
+@pytest.mark.parametrize('account', ['--force', '', 'a b', 'a\tb', 'a\nb', 123])
+def test_unsafe_account_name_fails_before_any_subprocess(prepared, buy, tmp_path, account):
+    directory = tmp_path / 'attempt'
+    with patch('honeyguider.paid.interactive', return_value=True), \
+         patch('honeyguider.cencori._run',
+               side_effect=AssertionError('version probe must not run')) as versioning, \
+         patch('honeyguider.paid.capture_quote',
+               side_effect=AssertionError('quote must not run')) as quoting, \
+         patch('honeyguider.paid.subprocess.run',
+               side_effect=AssertionError('whoami must not run for unsafe account')) as running, \
+         patch('honeyguider.paid.subprocess.Popen') as popen:
+        with pytest.raises(cencori.CencoriError, match='Wallet account name|requires both'):
+            paid.infer(prepared[0], buy, directory, 'USDC', lambda q: '0.01', print,
+                       account=account, expected_payer=PAYER)
+    versioning.assert_not_called()
+    quoting.assert_not_called()
+    running.assert_not_called()
+    popen.assert_not_called()
+    assert not directory.exists()
+
+
+def test_whoami_subprocess_hygiene(prepared, buy, tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', '/home/session')
+    monkeypatch.setenv('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/session/bus')
+    monkeypatch.setenv('NODE_OPTIONS', '--require unsafe')
+    monkeypatch.setenv('UPSTREAM_API_KEY', 'never-forward')
+    _, _, _, running, _, _, _ = run_bound(prepared, buy, tmp_path / 'attempt')
+    assert running.call_count == 2  # once before approval, once before launch
+    allowed = set(paid.wallet_environment())
+    for call in running.call_args_list:
+        argv, kwargs = call.args[0], call.kwargs
+        assert argv[-3:] == ['--account', ACCOUNT, 'whoami']
+        assert kwargs['capture_output'] is True
+        assert kwargs['timeout'] == 15
+        assert kwargs['stdin'] is subprocess.DEVNULL
+        assert set(kwargs['env']) <= allowed
+        assert 'NODE_OPTIONS' not in kwargs['env']
+        assert 'UPSTREAM_API_KEY' not in kwargs['env']
+        assert kwargs['env']['HOME'] == '/home/session'
+
+
+def test_identity_check_precedes_cap_prompt(prepared, buy, tmp_path):
+    seen = []
+
+    def hook(index, arguments, directory):
+        seen.append((index, (directory / 'approval.json').exists()))
+
+    _, _, _, _, _, _, events = run_bound(prepared, buy, tmp_path / 'attempt', whoami_hook=hook)
+    kinds = [kind for kind, _ in events]
+    # Exact adjacency: quote, first identity, cap prompt, code prompt, second
+    # identity, then the only purchase — no prompt sits between re-verify/launch.
+    assert kinds == ['quote', 'whoami', 'prompt', 'prompt', 'whoami', 'purchase']
+    first_index = kinds.index('whoami')
+    cap_index = next(i for i, (kind, value) in enumerate(events)
+                     if kind == 'prompt' and value.startswith('Maximum spend'))
+    second_index = next(i for i in range(first_index + 1, len(kinds)) if kinds[i] == 'whoami')
+    purchase_index = kinds.index('purchase')
+    assert first_index < cap_index < second_index < purchase_index
+    assert all(kind != 'prompt' for kind, _ in events[second_index + 1:purchase_index])
+    argv = events[first_index][1]
+    assert argv[-3:] == ['--account', ACCOUNT, 'whoami']
+    assert argv[0] == str(buy)
+    # approval.json is absent for the first identity and present for the second.
+    assert seen == [(0, False), (1, True)]
+
+
+def test_quote_and_payment_forward_the_same_account(prepared, buy, tmp_path):
+    plan, quoting, purchasing, _, _, identity_calls, _ = run_bound(prepared, buy, tmp_path / 'attempt')
+    assert plan.tasks
+    quote_argv = quoting.call_args.args[0]
+    payment_argv = purchasing.call_args.args[0]
+    assert quote_argv[2:5] == ['--account', ACCOUNT, 'quote']
+    assert payment_argv[2:5] == ['--account', ACCOUNT, 'curl']
+    assert quote_argv[3] == payment_argv[3] == ACCOUNT
+    # The quote was issued before the first identity check.
+    assert identity_calls and identity_calls[0][-3:] == ['--account', ACCOUNT, 'whoami']
+    assert purchasing.call_count == 1
+
+
+def test_changed_payer_after_approval_aborts_before_launch(prepared, buy, tmp_path):
+    second = identity_output(address='0x' + 'E' * 40)
+    state = {}
+    with pytest.raises(cencori.CencoriError, match='changed between readiness and approval'):
+        run_bound(prepared, buy, tmp_path / 'attempt',
+                  identity=[IDENTITY_OUTPUT, second], state=state)
+    assert len(state['identity_calls']) == 2
+    state['purchasing'].assert_not_called()
+    assert (tmp_path / 'attempt' / 'approval.json').exists()
+    assert not (tmp_path / 'attempt' / 'attempt.json').exists()
+
+
+@pytest.mark.parametrize('failure', ['no_account', 'blank', 'partial'])
+def test_identity_lookup_failures_fail_closed(prepared, buy, tmp_path, failure):
+    output = {
+        'no_account': b'{"error":{"code":"no_account","message":"No account configured"}}',
+        'blank': b'',
+        'partial': b'buy on celo\n',
+    }[failure]
+    state = {}
+    with pytest.raises(cencori.CencoriError):
+        run_bound(prepared, buy, tmp_path / 'attempt', identity=output, state=state)
+    assert len(state['identity_calls']) == 1
+    state['purchasing'].assert_not_called()
+    assert not (tmp_path / 'attempt' / 'approval.json').exists()
+
+
+def test_nonzero_exit_with_valid_shape_still_passes(prepared, buy, tmp_path):
+    # The Phase 1 parser decides by shape, not return code.
+    plan, _, purchasing, _, _, _, _ = run_bound(
+        prepared, buy, tmp_path / 'attempt', identity=IDENTITY_OUTPUT, identity_returncode=1)
+    assert plan.tasks
+    assert purchasing.call_count == 1
+
+
+def test_sepolia_identity_is_refused_even_with_matching_address(prepared, buy, tmp_path):
+    state = {}
+    with pytest.raises(cencori.CencoriError, match='Celo Mainnet'):
+        run_bound(prepared, buy, tmp_path / 'attempt',
+                  identity=identity_output(network='celo-sepolia'), state=state)
+    state['purchasing'].assert_not_called()
+    assert not (tmp_path / 'attempt' / 'approval.json').exists()
+
+
+def test_expected_payer_comparison_is_case_insensitive(prepared, buy, tmp_path):
+    plan, _, purchasing, _, _, _, _ = run_bound(
+        prepared, buy, tmp_path / 'attempt', expected_payer=PAYER.lower())
+    assert plan.tasks
+    assert purchasing.call_count == 1
+
+
+def test_display_uses_supplied_alias_and_confirmed_address(prepared, buy, tmp_path):
+    _, _, _, _, messages, _, _ = run_bound(prepared, buy, tmp_path / 'attempt')
+    assert f'Paying from account: {ACCOUNT} ({PAYER}) on Celo Mainnet' in messages
+    assert (f'Paying from account: {ACCOUNT} ({PAYER}) on Celo Mainnet — '
+            f're-verified before launch') in messages
+    # The alias is the caller-supplied name, not the whoami name ("buy").
+    assert 'buy' != ACCOUNT
+
+
+def test_binding_adds_no_receipt_fields_and_persists_no_payer(prepared, buy, tmp_path):
+    directory = tmp_path / 'attempt'
+    run_bound(prepared, buy, directory)
+    approval = json.loads((directory / 'approval.json').read_bytes())
+    assert set(approval) == {
+        'request_sha256', 'token', 'max_amount', 'endpoint', 'method',
+        'buy_executable', 'buy_version', 'approved_at',
+    }
+    assert PAYER not in (directory / 'approval.json').read_text()
+    assert PAYER not in (directory / 'outcome.json').read_text()
