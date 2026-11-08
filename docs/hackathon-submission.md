@@ -118,7 +118,7 @@ settlement or adoption. This documentation revision did not rerun the suite.
 Submission-channel notes:
 
 - The sanitized showcase and recording loader are already published on `main`.
-  The submission documentation changes in this revision remain uncommitted.
+  The submission documentation changes in this revision are committed in this release.
 - Installation is from GitHub with pipx or uv; no PyPI release is claimed.
 - The deployed Streamlit revision and the video URL remain submission items to
   verify separately.

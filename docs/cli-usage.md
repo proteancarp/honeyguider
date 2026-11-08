@@ -223,7 +223,7 @@ shows every task, dependency and source. `--completed TASK_ID` can be repeated
 for in-memory, self-reported planning progress.
 
 Tracking requires an existing valid imported plan (default
-`.honeyguider/track`); the menu does not import receipts or discover private data.
+`.honeyguider/track`); the menu never imports receipts; only 2 → 3 lists existing local tracking directories (read-only). The previously imported AI plan path still requires a manually entered directory.
 See `honeyguider track import --help` for importing an already available successful
 receipt offline. Tracking storage must be separate from demo storage. Existing
 private files and append-only revisions retain their validation and permissions.

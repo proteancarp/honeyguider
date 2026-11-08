@@ -1,9 +1,12 @@
 # Guided workflow review
 
+Record as of the Phase 7 release; all accepted phases are committed on feat/honeyguider-journey at HEAD 3199449.
+
 ## Scope and architecture
 
-Work stayed in the existing worktree on `feat/guided-cli-workflow`. The branch
-and clean working tree were verified before edits. Changes are uncommitted.
+Work stayed in the existing worktree on `feat/honeyguider-journey`. The branch
+and clean working tree were verified before edits.
+Change history: Phases 1-3 revisions and the Phase 4-6 records are committed on feat/honeyguider-journey (implementation dae3d07; documentation 2ca387e and 3199449).
 
 The welcome module remains a Typer/Rich navigation layer. It calls the existing
 `cli.done`, `track_cli.done`, and `cli.check` handlers. There is no second progress
