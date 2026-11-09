@@ -547,7 +547,14 @@ def _stub_journey(monkeypatch, tmp_path, *, identity=_wallet_identity(),
     infer = Mock(return_value=plan if plan is not None else _fake_plan())
     imported = Mock(side_effect=list(outcomes) if outcomes else
                     [_outcome('imported', tmp_path / 'track' / 'plan')])
-    opened = Mock(side_effect=lambda ctx, directory=None: cli.console.print(f'SESSION:{directory}'))
+    # Record the session call as an ordered event as well as echoing a marker. The
+    # echo stays harmless; ordering proofs should use `opened.events`, not captured
+    # text, because Rich wraps long absolute paths and can split the marker.
+    events = []
+    opened = Mock(side_effect=lambda ctx, directory=None: (
+        events.append(('session', directory)),
+        cli.console.print(f'SESSION:{directory}')))
+    opened.events = events
     monkeypatch.setattr(welcome.journey, 'prepare', prepare)
     monkeypatch.setattr(welcome.journey, 'infer_with_receipt', infer)
     monkeypatch.setattr(welcome.journey, 'import_outcome', imported)
@@ -558,6 +565,20 @@ def _stub_journey(monkeypatch, tmp_path, *, identity=_wallet_identity(),
 
 def test_guided_journey_happy_path(monkeypatch, tmp_path):
     prepare, infer, imported, opened = _stub_journey(monkeypatch, tmp_path)
+
+    # Prove ordering from print/session *events*, not from CliRunner's captured
+    # text. Rich wraps long absolute tmp paths, so a printed 'SESSION:<path>'
+    # marker may never appear contiguously in result.output. This recorder is
+    # scoped to this test so the other _stub_journey callers are unaffected.
+    events = opened.events
+    original_print = cli.console.print
+
+    def _recording_print(*args, **kwargs):
+        if args:
+            events.append(('output', args[0]))
+        return original_print(*args, **kwargs)
+
+    monkeypatch.setattr(cli.console, 'print', _recording_print)
     result = invoke(_GUIDED)
     assert result.exit_code == 0, result.output
     flat = _flat(result.output)
@@ -588,7 +609,13 @@ def test_guided_journey_happy_path(monkeypatch, tmp_path):
     destination = tmp_path / 'track' / 'plan'
     opened.assert_called_once()
     assert opened.call_args.args[1] == destination
-    assert flat.index(_flat(welcome.UNKNOWN_SETTLEMENT)) < flat.index(f'SESSION:{destination}')
+    unknown_events = [index for index, (kind, value) in enumerate(events)
+                      if kind == 'output' and isinstance(value, str)
+                      and _flat(welcome.UNKNOWN_SETTLEMENT) in _flat(value)]
+    session_events = [index for index, (kind, _) in enumerate(events) if kind == 'session']
+    assert len(unknown_events) == 1
+    assert len(session_events) == 1
+    assert unknown_events[0] < session_events[0]
     assert _flat(welcome.NO_PROVIDER_CLAIM) in flat
     assert 'provider confirmed' not in flat.lower()
 
