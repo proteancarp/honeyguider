@@ -6,7 +6,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
-from honeyguider import cencori, paid, tracking
+from honeyguider import cencori, journey, paid, tracking
 from honeyguider.cli import app
 from honeyguider.research import Report, extract
 
@@ -249,3 +249,183 @@ def test_atomic_publication_and_link_failure(receipt, tmp_path, monkeypatch):
     with pytest.raises(OSError): tracking.append(directory, state)
     assert tracking.load(directory)['completed'] == ['setup']
     assert sorted(p.name for p in directory.iterdir()) == ['000000.json', '000001.json']
+
+
+def test_guided_imported_plan_completion_and_history(receipt, tmp_path, monkeypatch):
+    from honeyguider import welcome
+    monkeypatch.setattr(welcome, 'interactive_terminal', lambda: True)
+    directory = tmp_path / 'track'
+    tracking.import_receipt(receipt, directory)
+    initial = (directory / '000000.json').read_bytes()
+    receipt_before = {p.name: p.read_bytes() for p in receipt.iterdir()}
+    # Inspect a blocked task, reject its hidden completion action, then select setup.
+    text = f'2\n2\n{directory}\n4\nbuild\n1\n4\nsetup\n1\nn\n2\n1\ny\n3\n0\n0\n'
+    result = CliRunner().invoke(app, input=text)
+    assert result.exit_code == 0, result.output
+    blocked_view = result.output.split('Current step: build:')[1].split('Current step: setup:')[0]
+    assert 'Mark this step complete' not in blocked_view
+    assert 'Record build as complete?' not in blocked_view
+    assert 'Complete setup first' in blocked_view
+    assert 'Completion cancelled' in result.output
+    assert 'Completed: setup' in result.output
+    assert 'Current step: build:' in result.output
+    assert tracking.load(directory)['completed'] == ['setup']
+    assert (directory / '000000.json').read_bytes() == initial
+    assert sorted(p.name for p in directory.iterdir()) == ['000000.json', '000001.json']
+    assert receipt_before == {p.name: p.read_bytes() for p in receipt.iterdir()}
+    before = (directory / '000001.json').read_bytes()
+    reopened = CliRunner().invoke(app, input=f'2\n2\n{directory}\n2\n0\n0\n')
+    assert reopened.exit_code == 0, reopened.output
+    assert 'Current step: build:' in reopened.output
+    assert (directory / '000001.json').read_bytes() == before
+    assert len(list(directory.iterdir())) == 2
+
+
+@pytest.mark.parametrize('failure', ['before-publication', 'after-publication', 'unreadable-after-publication'])
+def test_guided_completion_storage_failure_reconciles_without_retry(receipt, tmp_path, monkeypatch, failure):
+    from unittest.mock import Mock
+    from honeyguider import welcome
+    monkeypatch.setattr(welcome, 'interactive_terminal', lambda: True)
+    directory = tmp_path / 'track'
+    tracking.import_receipt(receipt, directory)
+    initial = (directory / '000000.json').read_bytes()
+    receipt_before = {p.name: p.read_bytes() for p in receipt.iterdir()}
+    real_load = tracking.load
+    publication_failed = False
+
+    def fail(*args):
+        nonlocal publication_failed
+        publication_failed = True
+        raise OSError('simulated storage failure')
+
+    if failure == 'before-publication':
+        monkeypatch.setattr(tracking.os, 'link', fail)
+    else:
+        # append has already linked the new revision and removed its temporary
+        # file when the final directory durability sync fails.
+        monkeypatch.setattr(tracking.paid, 'sync_directory', fail)
+
+    def read(directory):
+        if publication_failed and failure == 'unreadable-after-publication':
+            raise OSError('simulated read failure')
+        return real_load(directory)
+
+    monkeypatch.setattr(tracking, 'load', read)
+    append = Mock(wraps=tracking.append)
+    monkeypatch.setattr(tracking, 'append', append)
+    result = CliRunner().invoke(app, input=f'2\n2\n{directory}\n1\ny\n0\n0\n')
+    output = ' '.join(result.output.split())
+    assert 'Completion could not be confirmed' in output
+    assert 'Saved progress may have changed' in output
+    assert 'No write will be retried automatically' in output
+    assert 'Completion not recorded' not in output
+    assert 'existing state is preserved' not in output
+    assert 'Completed: setup' not in output
+    assert append.call_count == 1
+    assert (directory / '000000.json').read_bytes() == initial
+    expected = [] if failure == 'before-publication' else ['setup']
+    assert real_load(directory)['completed'] == expected
+    assert len(list(directory.iterdir())) == (1 if not expected else 2)
+    assert receipt_before == {p.name: p.read_bytes() for p in receipt.iterdir()}
+    if failure == 'unreadable-after-publication':
+        assert result.exit_code == 1, result.output
+        assert 'Unable to verify saved progress' in output
+        assert 'Saved state currently shows' not in output
+    else:
+        assert result.exit_code == 0, result.output
+        state = 'incomplete' if failure == 'before-publication' else 'complete'
+        assert f'Saved state currently shows setup {state}.' in output
+        if expected:
+            assert 'Storage durability was not confirmed' in output
+            assert 'Current step: build:' in output
+
+
+def test_guided_completed_ai_task_has_no_completion_action(receipt, tmp_path, monkeypatch):
+    from unittest.mock import Mock
+    from honeyguider import welcome
+    monkeypatch.setattr(welcome, 'interactive_terminal', lambda: True)
+    directory = tmp_path / 'track'
+    tracking.import_receipt(receipt, directory)
+    assert invoke(directory, 'done', 'setup').exit_code == 0
+    before = {p.name: p.read_bytes() for p in directory.iterdir()}
+    append = Mock(side_effect=AssertionError('Completed task attempted a write'))
+    monkeypatch.setattr(tracking, 'append', append)
+    result = CliRunner().invoke(app, input=f'2\n2\n{directory}\n4\nsetup\n1\n2\n3\n0\n0\n')
+    assert result.exit_code == 0, result.output
+    inspected = result.output.split('Current step: setup:')[1]
+    assert 'Already complete: setup' in inspected
+    assert 'Mark this step complete' not in inspected
+    assert '1 complete' not in inspected
+    assert 'Record setup as complete?' not in inspected
+    assert 'Plan citation (not re-fetched)' in inspected
+    assert 'build: Build — ready' in inspected
+    append.assert_not_called()
+    assert before == {p.name: p.read_bytes() for p in directory.iterdir()}
+
+
+# --- Phase 5: journey import_outcome against a real receipt fixture --------
+
+
+def importable_receipt(receipt, tmp_path, name='importable'):
+    """Copy the shared fixture and add the two artifacts Phase 5 fingerprints."""
+    import shutil
+    target = tmp_path / name
+    shutil.copytree(receipt, target)
+    (target / 'stderr.bin').write_bytes(b'')
+    (target / 'headers.bin').write_bytes(b'')
+    target.chmod(0o700)
+    for path in target.iterdir():
+        path.chmod(0o600)
+    return target
+
+
+def test_journey_import_outcome_real_pipeline_is_idempotent(receipt, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = importable_receipt(receipt, tmp_path)
+    key = paid.load_request(source / 'request.json').request.sha256
+    assert journey.attempt_state(source).settlement is journey.Settlement.outcome_recorded_unconfirmed
+
+    first = journey.import_outcome(source)
+    assert first.disposition == 'imported'
+    fingerprint = journey.record_fingerprint(source)
+    destination = tmp_path / '.honeyguider' / 'track' / f'{key}-{fingerprint}'
+    assert first.destination.resolve() == destination
+    assert first.record.settlement is journey.Settlement.outcome_recorded_unconfirmed
+    assert first.record.validation == 'valid'
+    state = tracking.load(destination)
+    assert state['receipt'] == str(source.resolve())
+    assert state['request_sha256'] == key
+    assert [path.name for path in destination.iterdir()] == ['000000.json']
+
+    before = {path.name: path.read_bytes() for path in destination.iterdir()}
+    second = journey.import_outcome(source)
+    assert second.disposition == 'already_imported'
+    assert second.canonical_duplicate is True
+    assert {path.name: path.read_bytes() for path in destination.iterdir()} == before
+    # UNKNOWN settlement is preserved; correlation/import never promotes it.
+    after = journey.attempt_state(source)
+    assert after.settlement is journey.Settlement.outcome_recorded_unconfirmed
+    assert after.settlement is not journey.Settlement.provider_confirmed
+
+
+def test_journey_import_outcome_custom_consent_and_interrupted(receipt, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = importable_receipt(receipt, tmp_path)
+    custom = tmp_path / 'custom-track'
+    refused = journey.import_outcome(source, tracking_root=custom)
+    assert refused.disposition == 'custom_consent_required'
+    assert refused.custom_root is True and refused.custom_root_consent is False
+    assert not custom.exists()
+
+    fingerprint = journey.record_fingerprint(source)
+    key = paid.load_request(source / 'request.json').request.sha256
+    destination = journey.tracking_destination(key, fingerprint)
+    destination.mkdir(parents=True, mode=0o700)
+    interrupted = journey.import_outcome(source)
+    assert interrupted.disposition == 'interrupted_destination'
+    assert list(destination.iterdir()) == []
+
+    (destination / 'junk').write_text('not a revision')
+    malformed = journey.import_outcome(source)
+    assert malformed.disposition == 'conflict'
+    assert any('malformed destination' in problem for problem in malformed.problems)
